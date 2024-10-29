@@ -8,15 +8,17 @@ use std::{
 
 use jni::{strings::JNIStr, sys::JNINativeMethod, JNIEnv};
 
-use crate::{error::ZygiskError, impl_sealing::Sealed, raw};
+use crate::{error::ZygiskError, impl_sealing::Sealed};
 
-use super::ZygiskApiSpec;
+use super::ZygiskSpec;
+
+pub use crate::raw::v2::transparent::*;
 
 pub struct V2;
 
 impl Sealed for V2 {}
 
-impl ZygiskApiSpec for V2 {
+impl ZygiskSpec for V2 {
     type Spec = V2;
 }
 
@@ -37,14 +39,18 @@ impl<'a> super::ZygiskApi<'a, V2> {
         self.0.get_module_dir_fn.unwrap()(self.0.this)
     }
 
-    pub fn set_option(&self, option: raw::v2::RawOption) {
+    pub fn set_option(&self, option: ZygiskOption) {
         if let Some(f) = self.0.set_option_fn {
             f(self.0.this, option);
         }
     }
 
-    pub fn get_flags(&self) -> u32 {
-        self.0.get_flags_fn.unwrap()(self.0.this)
+    pub fn get_flags(&self) -> StateFlags {
+        self.0
+            .get_flags_fn
+            .map(|f| f(self.0.this))
+            .map(|raw| StateFlags::from_bits(raw).expect("unsupported flag returned by Zygisk"))
+            .unwrap_or(StateFlags::empty())
     }
 
     pub unsafe fn hook_jni_native_methods<M: AsMut<[JNINativeMethod]>>(

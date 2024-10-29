@@ -1,4 +1,4 @@
-use crate::{impl_sealing::Sealed, raw::ZygiskRawApi};
+use crate::{impl_sealing::Sealed, raw::ZygiskRaw};
 
 mod v1;
 pub use v1::V1;
@@ -12,14 +12,14 @@ mod v4;
 
 mod v5;
 
-pub trait ZygiskApiSpec
+pub trait ZygiskSpec
 where
     Self: Sealed,
-    <Self as ZygiskApiSpec>::Spec: ZygiskApiSpec,
+    <Self as ZygiskSpec>::Spec: ZygiskSpec,
 {
     type Spec;
 }
 
 pub struct ZygiskApi<'a, Version>(pub(crate) &'a Version::RawApiTable<'a>)
 where
-    Version: ZygiskRawApi;
+    Version: ZygiskRaw;

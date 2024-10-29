@@ -3,7 +3,7 @@ use std::panic::RefUnwindSafe;
 use jni::sys::JNIEnv;
 use libc::c_long;
 
-use crate::{api::ZygiskApiSpec, impl_sealing::Sealed, ZygiskModule};
+use crate::{api::ZygiskSpec, impl_sealing::Sealed, ZygiskModule};
 
 pub mod v1;
 pub mod v2;
@@ -13,40 +13,36 @@ pub mod v5;
 
 pub struct RawModule<'a, Version>
 where
-    Version: ZygiskRawApi + ?Sized,
+    Version: ZygiskRaw + ?Sized,
 {
-    pub inner: &'a dyn ZygiskModule<Version>,
-    pub api_table: *const <Version as ZygiskRawApi>::RawApiTable<'a>,
-    pub jni_env: *mut JNIEnv,
+    pub(crate) inner: &'a dyn ZygiskModule<Version>,
+    pub(crate) api_table: *const <Version as ZygiskRaw>::RawApiTable<'a>,
+    pub(crate) jni_env: *mut JNIEnv,
 }
 
 #[repr(C)]
 pub struct ModuleAbi<'a, Version>
 where
-    Version: ZygiskRawApi + ?Sized + 'a,
+    Version: ZygiskRaw + ?Sized + 'a,
 {
-    pub api_version: c_long,
-    pub this: &'a mut RawModule<'a, Version>,
+    pub(crate) api_version: c_long,
+    pub(crate) this: &'a mut RawModule<'a, Version>,
 
-    pub pre_app_specialize_fn: extern "C" fn(
+    pub(crate) pre_app_specialize_fn:
+        extern "C" fn(&mut RawModule<Version>, &mut <Version as ZygiskRaw>::AppSpecializeArgs<'_>),
+    pub(crate) post_app_specialize_fn:
+        extern "C" fn(&mut RawModule<Version>, &<Version as ZygiskRaw>::AppSpecializeArgs<'_>),
+    pub(crate) pre_server_specialize_fn: extern "C" fn(
         &mut RawModule<Version>,
-        &mut <Version as ZygiskRawApi>::AppSpecializeArgs<'_>,
+        &mut <Version as ZygiskRaw>::ServerSpecializeArgs<'_>,
     ),
-    pub post_app_specialize_fn:
-        extern "C" fn(&mut RawModule<Version>, &<Version as ZygiskRawApi>::AppSpecializeArgs<'_>),
-    pub pre_server_specialize_fn: extern "C" fn(
-        &mut RawModule<Version>,
-        &mut <Version as ZygiskRawApi>::ServerSpecializeArgs<'_>,
-    ),
-    pub post_server_specialize_fn: extern "C" fn(
-        &mut RawModule<Version>,
-        &<Version as ZygiskRawApi>::ServerSpecializeArgs<'_>,
-    ),
+    pub(crate) post_server_specialize_fn:
+        extern "C" fn(&mut RawModule<Version>, &<Version as ZygiskRaw>::ServerSpecializeArgs<'_>),
 }
 
-pub trait ZygiskRawApi
+pub trait ZygiskRaw
 where
-    Self: ZygiskApiSpec + Sealed,
+    Self: ZygiskSpec + Sealed,
 {
     const API_VERSION: c_long;
     type RawApiTable<'a>: RefUnwindSafe;

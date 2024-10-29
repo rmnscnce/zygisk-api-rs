@@ -1,9 +1,10 @@
 use api::ZygiskApi;
 use jni::JNIEnv;
-use raw::ZygiskRawApi;
+use raw::ZygiskRaw;
 
 pub mod api;
-pub mod aux;
+mod aux;
+pub use aux::*;
 pub mod error;
 pub mod raw;
 
@@ -13,7 +14,7 @@ pub(crate) mod impl_sealing {
 
 pub trait ZygiskModule<Version>
 where
-    Version: ZygiskRawApi,
+    Version: ZygiskRaw,
 {
     fn on_load(&self, _: ZygiskApi<Version>, _: JNIEnv) {}
 
@@ -57,7 +58,7 @@ pub fn module_entry<'a, Version>(
     api_table: *const Version::RawApiTable<'a>,
     jni_env: *mut jni::sys::JNIEnv,
 ) where
-    Version: ZygiskRawApi<ModuleAbi<'a> = raw::ModuleAbi<'a, Version>> + 'a,
+    Version: ZygiskRaw<ModuleAbi<'a> = raw::ModuleAbi<'a, Version>> + 'a,
 {
     let raw_module = Box::new(raw::RawModule {
         inner,
@@ -88,7 +89,7 @@ macro_rules! register_module {
             struct TypeChecking<T, U>(T, ::std::marker::PhantomData<U>)
             where
                 T: $crate::ZygiskModule<U>,
-                U: $crate::raw::ZygiskRawApi;
+                U: $crate::raw::ZygiskRaw;
 
             let m = TypeChecking($module, ::std::marker::PhantomData);
 

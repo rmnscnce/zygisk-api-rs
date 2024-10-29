@@ -5,15 +5,17 @@ use std::{
 
 use jni::{strings::JNIStr, sys::JNINativeMethod, JNIEnv};
 
-use crate::{error::ZygiskError, impl_sealing::Sealed, raw};
+use crate::{error::ZygiskError, impl_sealing::Sealed};
 
-use super::ZygiskApiSpec;
+use super::ZygiskSpec;
+
+pub use crate::raw::v1::transparent::*;
 
 pub struct V1;
 
 impl Sealed for V1 {}
 
-impl ZygiskApiSpec for V1 {
+impl ZygiskSpec for V1 {
     type Spec = V1;
 }
 
@@ -48,7 +50,7 @@ impl<'a> super::ZygiskApi<'a, V1> {
     /// Set various options for your module.
     /// Please note that this function accepts one single option at a time.
     /// Check [ZygiskOption] for the full list of options available.
-    pub fn set_option(&self, option: raw::v1::RawOption) {
+    pub fn set_option(&self, option: ZygiskOption) {
         if let Some(f) = self.0.set_option_fn {
             f(self.0.this, option);
         }

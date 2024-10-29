@@ -52,27 +52,30 @@ where
 
 #[doc(hidden)]
 #[inline(always)]
-pub fn module_entry<'a, Version>(
-    module: &'a dyn ZygiskModule<Version>,
+pub fn module_entry<'a, Version, Module>(
+    inner: &'a Module,
     api_table: *const Version::RawApiTable<'a>,
     jni_env: *mut jni::sys::JNIEnv,
 ) where
     Version: ZygiskRawApi<ModuleAbi<'a> = raw::ModuleAbi<'a, Version>> + 'a,
+    Module: ZygiskModule<Version>,
 {
-    let raw_module = Box::new(raw::RawModule::<'a> {
-        inner: module,
+    let mut raw_module = raw::RawModule::<'a> {
+        inner,
         api_table,
         jni_env,
-    });
+    };
+
+    let raw_module = unsafe { &mut *(&mut raw_module as *mut _) };
 
     let api_table: &Version::RawApiTable<'_> = unsafe { &*api_table.cast() };
     let env = unsafe { JNIEnv::from_raw(jni_env.cast()).unwrap_unchecked() };
-    let mut abi = Version::abi_from_module(Box::leak(raw_module));
+    let mut abi = Version::abi_from_module(raw_module);
 
     if let Some(f) = Version::register_module_fn(api_table) {
         if f(api_table, &mut abi) {
             let api = ZygiskApi::<Version>(api_table);
-            module.on_load(api, env);
+            inner.on_load(api, env);
         }
     }
 }
@@ -80,7 +83,6 @@ pub fn module_entry<'a, Version>(
 #[macro_export]
 macro_rules! register_module {
     ($module:expr) => {
-        #[allow(no_mangle_generic_items)]
         #[no_mangle]
         pub extern "C" fn zygisk_module_entry(
             api_table: *const (),

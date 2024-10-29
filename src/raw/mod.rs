@@ -73,6 +73,15 @@ pub struct RawModuleAbi<'a, Version>(
 where
     Version: ZygiskRaw<'a>;
 
+impl<'a, Version> RawModuleAbi<'a, Version>
+where
+    Version: ZygiskRaw<'a>,
+{
+    pub(crate) fn from_ptr(ptr: *mut ModuleAbi<'a, Version>) -> Self {
+        Self(ptr, PhantomData)
+    }
+}
+
 pub trait ZygiskRaw<'a>
 where
     Self: ZygiskSpec,

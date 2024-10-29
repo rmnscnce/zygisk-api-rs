@@ -70,7 +70,16 @@ pub struct RawModuleAbi<'a, Version>(
     PhantomData<&'a Version>,
 )
 where
-    for<'b> Version: ZygiskRaw<'b> + 'b;
+    Version: ZygiskRaw<'a>;
+
+impl<'a, Version> RawModuleAbi<'a, Version>
+where
+    Version: ZygiskRaw<'a>,
+{
+    pub fn from_ptr(ptr: *mut ModuleAbi<'a, Version>) -> Self {
+        Self(ptr, PhantomData)
+    }
+}
 
 pub trait ZygiskRaw<'a>
 where
@@ -85,6 +94,8 @@ where
     fn abi_from_module(module: &'a mut RawModule<'a, Self>) -> <Self as ZygiskRaw<'a>>::ModuleAbi;
 
     fn register_module_fn(
-        table: &'a Self::RawApiTable,
-    ) -> Option<for<'b> extern "C" fn(*const Self::RawApiTable, ModuleAbi<'b, Self>) -> bool>;
+        table: &'a <Self as ZygiskRaw<'a>>::RawApiTable,
+    ) -> Option<
+        extern "C" fn(*const <Self as ZygiskRaw<'a>>::RawApiTable, RawModuleAbi<'_, Self>) -> bool,
+    >;
 }

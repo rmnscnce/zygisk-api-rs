@@ -3,7 +3,7 @@ use libc::{c_char, c_int, c_long};
 
 use crate::api::{ZygiskApi, V1};
 
-use super::{ModuleAbi, RawModule, ZygiskRaw};
+use super::{ModuleAbi, RawModule, RawModuleAbi, ZygiskRaw};
 
 pub(crate) mod transparent {
     use jni::{
@@ -55,7 +55,7 @@ pub(crate) mod transparent {
 pub struct RawApiTable {
     pub(crate) this: *mut (),
     pub(crate) register_module_fn:
-        Option<for<'a> extern "C" fn(*const Self, ModuleAbi<'a, V1>) -> bool>,
+        Option<for<'a> extern "C" fn(*const Self, RawModuleAbi<'a, V1>) -> bool>,
 
     pub(crate) hook_jni_native_methods_fn:
         Option<for<'a> extern "C" fn(JNIEnv<'a>, *const c_char, *mut JNINativeMethod, c_int)>,
@@ -132,7 +132,7 @@ impl<'a> ZygiskRaw<'a> for V1 {
 
     fn register_module_fn(
         table: &'a Self::RawApiTable,
-    ) -> Option<for<'b> extern "C" fn(*const Self::RawApiTable, ModuleAbi<'b, V1>) -> bool> {
+    ) -> Option<extern "C" fn(*const Self::RawApiTable, RawModuleAbi<'_, V1>) -> bool> {
         table.register_module_fn
     }
 }

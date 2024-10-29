@@ -1,6 +1,6 @@
 use api::ZygiskApi;
 use jni::JNIEnv;
-use raw::{RawApiTable, ZygiskRaw};
+use raw::{RawApiTable, RawModuleAbi, ZygiskRaw};
 
 pub mod api;
 mod aux;
@@ -14,7 +14,7 @@ pub(crate) mod impl_sealing {
 
 pub trait ZygiskModule<Version>
 where
-    for<'a> Version: ZygiskRaw<'a> + 'a,
+    for<'a> Version: ZygiskRaw<'a>,
 {
     fn on_load(&self, _: ZygiskApi<'_, Version>, _: JNIEnv<'_>) {}
 
@@ -60,14 +60,15 @@ pub fn module_entry<'a, Version, ModuleImpl>(
     for<'b> Version: ZygiskRaw<'b, ModuleAbi = raw::ModuleAbi<'b, Version>> + 'b,
     ModuleImpl: ZygiskModule<Version>,
 {
-    let raw_module = Box::new(raw::RawModule::<'a> {
+    let raw_module = Box::leak(Box::new(raw::RawModule::<'a> {
         dispatch,
         api_table,
         jni_env: unsafe { jni_env.unsafe_clone() },
-    });
+    }));
     if let Some(f) = Version::register_module_fn(unsafe { api_table.0.as_ref().unwrap_unchecked() })
     {
-        if f(api_table.0, Version::abi_from_module(Box::leak(raw_module))) {
+        let abi = RawModuleAbi::from_ptr(Box::leak(Box::new(Version::abi_from_module(raw_module))));
+        if f(api_table.0, abi) {
             let api = ZygiskApi::<Version>(api_table);
             dispatch.on_load(api, jni_env);
         }

@@ -67,7 +67,8 @@ impl<'a, Version> RawModuleAbi<'a, Version>
 where
     Version: ZygiskRaw<'a>,
 {
-    pub(crate) fn from_ptr(ptr: *mut ModuleAbi<'a, Version>) -> Self {
+    #[doc(hidden)]
+    pub fn from_ptr(ptr: *mut ModuleAbi<'a, Version>) -> Self {
         Self(ptr, PhantomData)
     }
 }

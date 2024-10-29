@@ -80,12 +80,12 @@ pub fn module_entry<'a, Version>(
 }
 
 #[macro_export]
-macro_rules! module {
+macro_rules! register_module {
     ($module:expr) => {
         #[no_mangle]
         pub extern "C" fn zygisk_module_entry(
-            api_table: *const $crate::raw::RawApiTable,
-            jni_env: *mut ::jni::sys::JNIEnv,
+            api_table: *const $crate::raw::ZygiskRawApi::<_>::RawApiTable,
+            jni_env: *mut $crate::aux::jni::sys::JNIEnv,
         ) {
             if ::std::panic::catch_unwind(|| {
                 $crate::module_entry($module, api_table, jni_env);
@@ -99,7 +99,7 @@ macro_rules! module {
 }
 
 #[macro_export]
-macro_rules! zygisk_companion {
+macro_rules! register_companion {
     ($func: expr) => {
         #[no_mangle]
         extern "C" fn zygisk_companion_entry(socket_fd: ::std::os::unix::io::RawFd) {

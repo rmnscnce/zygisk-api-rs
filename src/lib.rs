@@ -1,3 +1,5 @@
+use std::cell::OnceCell;
+
 use api::ZygiskApi;
 use jni::JNIEnv;
 use raw::ZygiskRawApi;
@@ -15,6 +17,13 @@ pub trait ZygiskModule<Version>
 where
     Version: ZygiskRawApi,
 {
+    /// ### Memory-safety API
+    fn prepare(&mut self);
+
+    /// ### Memory-safety API
+    #[allow(clippy::mut_from_ref)]
+    fn raw_module(&self) -> &mut OnceCell<raw::RawModule<Version>>;
+
     fn on_load(&self, _: ZygiskApi<Version>, _: JNIEnv) {}
 
     fn pre_app_specialize(
@@ -53,23 +62,23 @@ where
 #[doc(hidden)]
 #[inline(always)]
 pub fn module_entry<'a, Version>(
-    inner: &'a dyn ZygiskModule<Version>,
+    inner: &'a mut dyn ZygiskModule<Version>,
     api_table: *const Version::RawApiTable<'a>,
     jni_env: *mut jni::sys::JNIEnv,
 ) where
     Version: ZygiskRawApi<ModuleAbi<'a> = raw::ModuleAbi<'a, Version>> + 'a,
 {
-    let mut raw_module = raw::RawModule {
+    inner.prepare();
+
+    inner.raw_module().get_or_init(|| raw::RawModule {
         inner,
         api_table,
         jni_env,
-    };
-
-    let raw_module = unsafe { &mut *(&mut raw_module as *mut _) };
+    });
 
     let api_table = unsafe { &*api_table.cast() };
     let env = unsafe { JNIEnv::from_raw(jni_env.cast()).unwrap_unchecked() };
-    let mut abi = Version::abi_from_module(raw_module);
+    let mut abi = Version::abi_from_module(inner.raw_module().get_mut().unwrap());
 
     if let Some(f) = Version::register_module_fn(api_table) {
         if f(api_table, &mut abi) {
@@ -88,8 +97,10 @@ macro_rules! register_module {
             api_table: *const (),
             jni_env: *mut $crate::aux::jni::sys::JNIEnv,
         ) {
+            let mut module = $module;
+
             if ::std::panic::catch_unwind(|| {
-                $crate::module_entry($module, api_table.cast(), jni_env);
+                $crate::module_entry(module, api_table.cast(), jni_env);
             })
             .is_err()
             {

@@ -29,15 +29,6 @@ pub struct RawApiTable<'a, Version>(
 where
     Version: ZygiskRaw<'a> + 'a;
 
-impl<'a, Version> RawApiTable<'a, Version>
-where
-    Version: ZygiskRaw<'a> + 'a,
-{
-    pub fn from_ptr(ptr: *const <Version as ZygiskRaw<'a>>::RawApiTable) -> Self {
-        Self(ptr, PhantomData)
-    }
-}
-
 #[repr(C)]
 pub struct ModuleAbi<'a, Version>
 where
@@ -76,7 +67,7 @@ impl<'a, Version> RawModuleAbi<'a, Version>
 where
     Version: ZygiskRaw<'a>,
 {
-    pub fn from_ptr(ptr: *mut ModuleAbi<'a, Version>) -> Self {
+    pub(crate) fn from_ptr(ptr: *mut ModuleAbi<'a, Version>) -> Self {
         Self(ptr, PhantomData)
     }
 }

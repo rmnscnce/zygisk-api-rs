@@ -21,21 +21,21 @@ pub(crate) mod transparent {
 }
 #[repr(C)]
 pub struct RawApiTable {
-    pub this: *mut (),
-    pub register_module_fn:
+    pub(crate) this: *mut (),
+    pub(crate) register_module_fn:
         Option<for<'b> extern "C" fn(*const Self, RawModuleAbi<'b, V2>) -> bool>,
 
-    pub hook_jni_native_methods_fn:
+    pub(crate) hook_jni_native_methods_fn:
         Option<extern "C" fn(*mut JNIEnv, *const c_char, *mut JNINativeMethod, c_int)>,
-    pub plt_hook_register_fn:
+    pub(crate) plt_hook_register_fn:
         Option<extern "C" fn(*const c_char, *const c_char, *mut (), *mut *mut ())>,
-    pub plt_hook_exclude_fn: Option<extern "C" fn(*const c_char, *const c_char)>,
-    pub plt_hook_commit_fn: Option<extern "C" fn() -> bool>,
+    pub(crate) plt_hook_exclude_fn: Option<extern "C" fn(*const c_char, *const c_char)>,
+    pub(crate) plt_hook_commit_fn: Option<extern "C" fn() -> bool>,
 
-    pub connect_companion_fn: Option<extern "C" fn(*const ()) -> c_int>,
-    pub set_option_fn: Option<extern "C" fn(*const (), transparent::ZygiskOption)>,
-    pub get_module_dir_fn: Option<extern "C" fn(*const ()) -> c_int>,
-    pub get_flags_fn: Option<extern "C" fn(*const ()) -> u32>,
+    pub(crate) connect_companion_fn: Option<extern "C" fn(*const ()) -> c_int>,
+    pub(crate) set_option_fn: Option<extern "C" fn(*const (), transparent::ZygiskOption)>,
+    pub(crate) get_module_dir_fn: Option<extern "C" fn(*const ()) -> c_int>,
+    pub(crate) get_flags_fn: Option<extern "C" fn(*const ()) -> u32>,
 }
 
 impl<'a> ZygiskRaw<'a> for V2 {

@@ -90,7 +90,7 @@ macro_rules! register_module {
                 T: $crate::ZygiskModule<U>,
                 U: $crate::raw::ZygiskRawApi;
 
-            let m = TypeChecking($module);
+            let m = TypeChecking($module, ::std::marker::PhantomData);
 
             if ::std::panic::catch_unwind(|| {
                 $crate::module_entry(&(m.0), api_table.cast(), jni_env);

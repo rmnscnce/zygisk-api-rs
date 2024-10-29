@@ -83,7 +83,7 @@ macro_rules! register_module {
         #[allow(no_mangle_generic_items)]
         #[no_mangle]
         pub extern "C" fn zygisk_module_entry<'a, Version>(
-            api_table: *const <Version as $crate::raw::ZygiskRawApi>::RawApiTable<'a>,
+            api_table: *const (),
             jni_env: *mut $crate::aux::jni::sys::JNIEnv,
         ) where
             Version: $crate::raw::ZygiskRawApi + 'a,

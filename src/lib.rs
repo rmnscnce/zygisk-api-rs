@@ -85,7 +85,7 @@ macro_rules! register_module {
             api_table: *const (),
             jni_env: *mut $crate::aux::jni::sys::JNIEnv,
         ) {
-            struct TypeChecking<T, U>(T)
+            struct TypeChecking<T, U>(T, ::std::marker::PhantomData<U>)
             where
                 T: $crate::ZygiskModule<U>,
                 U: $crate::raw::ZygiskRawApi;

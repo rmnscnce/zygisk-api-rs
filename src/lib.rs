@@ -82,6 +82,7 @@ pub fn module_entry<'a, Version>(
 #[macro_export]
 macro_rules! register_module {
     ($module:expr) => {
+        #[allow(no_mangle_generic_items)]
         #[no_mangle]
         pub extern "C" fn zygisk_module_entry(
             api_table: *const (),
@@ -113,7 +114,7 @@ macro_rules! register_companion {
 
             // Call the actual function.
             let _type_check: fn(::std::os::unix::net::UnixStream) = $func;
-            if let Err(_) = ::std::panic::catch_unwind(|| _type_check(stream)) {
+            if ::std::panic::catch_unwind(|| _type_check(stream)).is_err() {
                 // Panic messages should be displayed by the default panic hook.
                 ::std::process::abort();
             }

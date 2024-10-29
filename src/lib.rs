@@ -82,15 +82,16 @@ pub fn module_entry<'a, Version>(
 #[macro_export]
 macro_rules! register_module {
     ($module:expr) => {
+        #[allow(no_mangle_generic_items)]
         #[no_mangle]
         pub extern "C" fn zygisk_module_entry<'a, Version>(
-            api_table: *const $crate::raw::ZygiskRawApi<Version>::RawApiTable<'a>,
+            api_table: *const <T as $crate::raw::ZygiskRawApi>::RawApiTable<'a>,
             jni_env: *mut $crate::aux::jni::sys::JNIEnv,
         ) where
             Version: $crate::raw::ZygiskRawApi + 'a,
         {
             if ::std::panic::catch_unwind(|| {
-                $crate::module_entry($module, api_table, jni_env);
+                $crate::module_entry($module, api_table.cast(), jni_env);
             })
             .is_err()
             {

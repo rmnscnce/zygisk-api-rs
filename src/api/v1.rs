@@ -20,7 +20,7 @@ impl ZygiskSpec for V1 {
     type Spec = V1;
 }
 
-impl<'local> super::ZygiskApi<'local, V1> {
+impl super::ZygiskApi<'_, V1> {
     /// Connect to a root companion process and get a Unix domain socket for IPC.
     ///
     /// This API only works in the `pre[XXX]Specialize` functions due to SELinux restrictions.
@@ -36,11 +36,12 @@ impl<'local> super::ZygiskApi<'local, V1> {
     ///
     /// Returns a [UnixStream] that is connected to the socket passed to your module's companion
     /// request handler. Returns `Err` if the connection attempt failed.
-    pub fn connect_companion(&'local self) -> Result<UnixStream, ZygiskError> {
-        match self
-            .as_tbl()
+    pub fn connect_companion(&self) -> Result<UnixStream, ZygiskError> {
+        let api_dispatch = unsafe { self.dispatch() };
+
+        match api_dispatch
             .connect_companion_fn
-            .map(|f| f(self.as_tbl().this))
+            .map(|f| f(api_dispatch.this))
             .unwrap_or(-1)
         {
             -1 => Err(ZygiskError::ConnectCompanionError),
@@ -51,9 +52,11 @@ impl<'local> super::ZygiskApi<'local, V1> {
     /// Set various options for your module.
     /// Please note that this function accepts one single option at a time.
     /// Check [ZygiskOption] for the full list of options available.
-    pub fn set_option(&'local self, option: ZygiskOption) {
-        if let Some(f) = self.as_tbl().set_option_fn {
-            f(self.as_tbl().this, option);
+    pub fn set_option(&self, option: ZygiskOption) {
+        let api_dispatch = unsafe { self.dispatch() };
+
+        if let Some(f) = api_dispatch.set_option_fn {
+            f(api_dispatch.this, option);
         }
     }
 
@@ -70,15 +73,15 @@ impl<'local> super::ZygiskApi<'local, V1> {
     ///
     /// This function is unsafe, since a badly designed hook or misuse of raw pointers may lead to
     /// memory unsafety.
-    pub unsafe fn hook_jni_native_methods<M: AsMut<[JNINativeMethod]>>(
-        &'local self,
-        env: JNIEnv<'local>,
-        class_name: &'local JNIStr,
+    pub unsafe fn hook_jni_native_methods<'a, M: AsMut<[JNINativeMethod]>>(
+        &self,
+        env: JNIEnv<'a>,
+        class_name: &'a JNIStr,
         mut methods: M,
     ) {
         let methods = methods.as_mut();
 
-        if let Some(func) = self.as_tbl().hook_jni_native_methods_fn {
+        if let Some(func) = self.dispatch().hook_jni_native_methods_fn {
             func(
                 env,
                 class_name.as_ptr(),
@@ -107,7 +110,7 @@ impl<'local> super::ZygiskApi<'local, V1> {
     /// This function is unsafe, since a badly designed hook or misuse of raw pointers may lead to
     /// memory unsafety.
     pub unsafe fn plt_hook_register<S: AsRef<str>>(
-        &'local self,
+        &self,
         regex: S,
         symbol: S,
         new_func: *mut (),
@@ -116,7 +119,7 @@ impl<'local> super::ZygiskApi<'local, V1> {
         let regex = regex.as_ref();
         let symbol = symbol.as_ref();
 
-        if let Some(func) = self.as_tbl().plt_hook_register_fn {
+        if let Some(func) = self.dispatch().plt_hook_register_fn {
             func(
                 regex.as_ptr().cast(),
                 symbol.as_ptr().cast(),
@@ -128,11 +131,11 @@ impl<'local> super::ZygiskApi<'local, V1> {
 
     /// For ELFs loaded in memory matching `regex`, exclude hooks registered for `symbol`.
     /// If symbol is empty, then all symbols will be excluded.
-    pub fn plt_hook_exclude<S: AsRef<str>>(&'local self, regex: S, symbol: S) {
+    pub fn plt_hook_exclude<S: AsRef<str>>(&self, regex: S, symbol: S) {
         let regex = regex.as_ref();
         let symbol = symbol.as_ref();
 
-        if let Some(func) = self.as_tbl().plt_hook_exclude_fn {
+        if let Some(func) = unsafe { self.dispatch() }.plt_hook_exclude_fn {
             func(
                 regex.as_ptr().cast(),
                 match symbol.is_empty() {
@@ -146,8 +149,8 @@ impl<'local> super::ZygiskApi<'local, V1> {
     /// Commit all the hooks that was previously registered.
     ///
     /// Returns [`ZygiskError::PltHookCommitError`] if any error occurs.
-    pub fn plt_hook_commit(&'local self) -> Result<(), ZygiskError> {
-        match self.as_tbl().plt_hook_commit_fn.map(|f| f()) {
+    pub fn plt_hook_commit(&self) -> Result<(), ZygiskError> {
+        match unsafe { self.dispatch() }.plt_hook_commit_fn.map(|f| f()) {
             Some(true) => Ok(()),
             _ => Err(ZygiskError::PltHookCommitError),
         }

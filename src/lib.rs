@@ -19,7 +19,7 @@ where
     fn on_load(&self, _: ZygiskApi<'_, Version>, _: JNIEnv<'_>) {}
 
     fn pre_app_specialize<'a>(
-        &'a self,
+        &self,
         _: ZygiskApi<'a, Version>,
         _: JNIEnv<'a>,
         _: &'a mut <Version as ZygiskRaw<'_>>::AppSpecializeArgs,
@@ -27,7 +27,7 @@ where
     }
 
     fn post_app_specialize<'a>(
-        &'a self,
+        &self,
         _: ZygiskApi<'a, Version>,
         _: JNIEnv<'a>,
         _: &'a <Version as ZygiskRaw<'_>>::AppSpecializeArgs,
@@ -35,7 +35,7 @@ where
     }
 
     fn pre_server_specialize<'a>(
-        &'a self,
+        &self,
         _: ZygiskApi<'a, Version>,
         _: JNIEnv<'a>,
         _: &'a mut <Version as ZygiskRaw<'_>>::ServerSpecializeArgs,
@@ -43,7 +43,7 @@ where
     }
 
     fn post_server_specialize<'a>(
-        &'a self,
+        &self,
         _: ZygiskApi<'a, Version>,
         _: JNIEnv<'a>,
         _: &'a <Version as ZygiskRaw<'_>>::ServerSpecializeArgs,

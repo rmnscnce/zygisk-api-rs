@@ -23,15 +23,16 @@ where
     type Spec;
 }
 
+#[repr(transparent)]
 pub struct ZygiskApi<'a, Version>(pub(crate) RawApiTable<'a, Version>)
 where
-    for<'b> Version: ZygiskRaw<'b> + 'b;
+    Version: ZygiskRaw<'a> + 'a;
 
 impl<'a, Version> ZygiskApi<'a, Version>
 where
-    for<'b> Version: ZygiskRaw<'b> + 'b,
+    Version: ZygiskRaw<'a> + 'a,
 {
-    pub(crate) fn as_tbl(&self) -> &<Version as ZygiskRaw<'_>>::RawApiTable {
-        unsafe { &*self.0 .0.cast() }
+    pub(crate) unsafe fn dispatch(&self) -> &<Version as ZygiskRaw<'a>>::RawApiTable {
+        &*self.0 .0
     }
 }

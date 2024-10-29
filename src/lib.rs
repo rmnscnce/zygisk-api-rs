@@ -52,15 +52,14 @@ where
 
 #[doc(hidden)]
 #[inline(always)]
-pub fn module_entry<'a, Version, Module>(
-    inner: &'a Module,
+pub fn module_entry<'a, Version>(
+    inner: &'a dyn ZygiskModule<Version>,
     api_table: *const Version::RawApiTable<'a>,
     jni_env: *mut jni::sys::JNIEnv,
 ) where
     Version: ZygiskRawApi<ModuleAbi<'a> = raw::ModuleAbi<'a, Version>> + 'a,
-    Module: ZygiskModule<Version>,
 {
-    let mut raw_module = raw::RawModule::<'a> {
+    let mut raw_module = raw::RawModule {
         inner,
         api_table,
         jni_env,
@@ -68,7 +67,7 @@ pub fn module_entry<'a, Version, Module>(
 
     let raw_module = unsafe { &mut *(&mut raw_module as *mut _) };
 
-    let api_table: &Version::RawApiTable<'_> = unsafe { &*api_table.cast() };
+    let api_table = unsafe { &*api_table.cast() };
     let env = unsafe { JNIEnv::from_raw(jni_env.cast()).unwrap_unchecked() };
     let mut abi = Version::abi_from_module(raw_module);
 

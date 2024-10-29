@@ -84,7 +84,7 @@ macro_rules! register_module {
         #[no_mangle]
         pub extern "C" fn zygisk_module_entry(
             api_table: *const (),
-            jni_env: *mut $crate::aux::jni::sys::JNIEnv,
+            jni_env: *mut $crate::jni::sys::JNIEnv,
         ) {
             struct TypeChecking<T, U>(T, ::std::marker::PhantomData<U>)
             where

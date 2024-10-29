@@ -71,7 +71,7 @@ impl super::ZygiskApi<'_, V2> {
 
         if let Some(func) = self.dispatch().hook_jni_native_methods_fn {
             func(
-                env.get_native_interface(),
+                env,
                 class_name.as_ptr(),
                 methods.as_mut_ptr(),
                 methods.len() as _,

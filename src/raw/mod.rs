@@ -7,7 +7,7 @@ use crate::{api::ZygiskSpec, ZygiskModule};
 
 pub mod v1;
 pub mod v2;
-mod v3;
+pub mod v3;
 mod v4;
 mod v5;
 

@@ -1,13 +1,13 @@
 # Zygisk API bindings for Rust
 
 ## Compatibility
-| API Version | Minimum Magisk Version | Minimum ZygiskNext Version | Implemented |
-| ----------- | ---------------------- | -------------------------- | ----------- |
-| v1          | 23014                  | v4-0.1.0                   | ✅           |
-| v2          | 23019                  | v4-0.1.0                   | ✅           |
-| v3          | 24300                  | v4-0.1.0                   | ⏳️           |
-| v4          | 25204                  | v4-0.1.0                   | ⏳️           |
-| v5          | 26403                  | ~~(don't know yet)~~       | ⏳️           |
+| API Version | Minimum Magisk Version | Minimum ZygiskNext Version                               | Implemented |
+| ----------- | ---------------------- | -------------------------------------------------------- | ----------- |
+| v1          | 23014                  | v4-0.1.0                                                 | ✅           |
+| v2          | 23019                  | v4-0.1.0                                                 | ✅           |
+| v3          | 24300                  | v4-0.1.0                                                 | ✅           |
+| v4          | 25204                  | v4-0.1.0                                                 | ⏳️           |
+| v5          | 26403                  | ~~It's supported in the latest version~~ | ⏳️           |
 
 
 ## References

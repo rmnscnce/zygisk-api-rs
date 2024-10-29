@@ -1,4 +1,4 @@
-use jni::sys::{JNIEnv, JNINativeMethod};
+use jni::{sys::JNINativeMethod, JNIEnv};
 use libc::{c_char, c_int, c_long};
 
 use crate::{
@@ -26,7 +26,7 @@ pub struct RawApiTable {
         Option<for<'b> extern "C" fn(*const Self, RawModuleAbi<'b, V2>) -> bool>,
 
     pub(crate) hook_jni_native_methods_fn:
-        Option<extern "C" fn(*mut JNIEnv, *const c_char, *mut JNINativeMethod, c_int)>,
+        Option<extern "C" fn(JNIEnv<'_>, *const c_char, *mut JNINativeMethod, c_int)>,
     pub(crate) plt_hook_register_fn:
         Option<extern "C" fn(*const c_char, *const c_char, *mut (), *mut *mut ())>,
     pub(crate) plt_hook_exclude_fn: Option<extern "C" fn(*const c_char, *const c_char)>,

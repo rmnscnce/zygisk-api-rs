@@ -7,9 +7,9 @@ use crate::{api::ZygiskSpec, impl_sealing::Sealed, ZygiskModule};
 
 pub mod v1;
 pub mod v2;
-pub mod v3;
-pub mod v4;
-pub mod v5;
+mod v3;
+mod v4;
+mod v5;
 
 pub struct RawModule<'a, Version>
 where

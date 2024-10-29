@@ -10,9 +10,14 @@ use super::{ModuleAbi, ZygiskRaw};
 
 pub(crate) mod transparent {
 
-    pub use crate::raw::v1::transparent::{
-        AppSpecializeArgs, ServerSpecializeArgs, StateFlags, ZygiskOption,
-    };
+    pub use crate::raw::v1::transparent::{AppSpecializeArgs, ServerSpecializeArgs, ZygiskOption};
+
+    bitflags::bitflags! {
+        pub struct StateFlags: u32 {
+            const PROCESS_GRANTED_ROOT = (1 << 0);
+            const PROCESS_ON_DENYLIST = (1 << 1);
+        }
+    }
 }
 #[repr(C)]
 pub struct RawApiTable<'a> {

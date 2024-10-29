@@ -18,13 +18,6 @@ pub(crate) mod transparent {
         DlCloseModuleLibrary = 1,
     }
 
-    bitflags::bitflags! {
-        pub struct StateFlags: u32 {
-            const PROCESS_GRANTED_ROOT = (1 << 0);
-            const PROCESS_ON_DENYLIST = (1 << 1);
-        }
-    }
-
     #[repr(C)]
     pub struct AppSpecializeArgs<'a> {
         // Required arguments. These arguments are guaranteed to exist on all Android versions.

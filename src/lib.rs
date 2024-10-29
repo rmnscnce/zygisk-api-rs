@@ -60,13 +60,13 @@ pub fn module_entry<'a, Version>(
 ) where
     Version: ZygiskRaw<ModuleAbi<'a> = raw::ModuleAbi<'a, Version>> + 'a,
 {
-    let raw_module = Box::new(raw::RawModule {
+    let raw_module = Box::new(raw::RawModule::<'a> {
         inner,
         api_table,
         jni_env,
     });
-    let api_table = unsafe { &*api_table.cast() };
-    let env = unsafe { JNIEnv::from_raw(jni_env.cast()).unwrap_unchecked() };
+    let api_table: &'a Version::RawApiTable<'a> = unsafe { &*api_table.cast() };
+    let env: JNIEnv<'a> = unsafe { JNIEnv::from_raw(jni_env.cast()).unwrap_unchecked() };
     let mut abi = Version::abi_from_module(Box::leak(raw_module));
 
     if let Some(f) = Version::register_module_fn(api_table) {

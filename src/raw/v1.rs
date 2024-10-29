@@ -5,7 +5,7 @@ use jni::{
 };
 use libc::{c_char, c_int, c_long};
 
-use crate::api::{V1, ZygiskApi};
+use crate::api::{ZygiskApi, V1};
 
 use super::{ModuleAbi, RawModule, ZygiskRawApi};
 

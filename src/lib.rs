@@ -1,6 +1,6 @@
 use api::ZygiskApi;
 use jni::JNIEnv;
-use raw::ZygiskRaw;
+use raw::{RawApiTable, ZygiskRaw};
 
 pub mod api;
 mod aux;
@@ -14,65 +14,62 @@ pub(crate) mod impl_sealing {
 
 pub trait ZygiskModule<Version>
 where
-    Version: ZygiskRaw,
+    for<'a> Version: ZygiskRaw<'a> + 'a,
 {
-    fn on_load(&self, _: ZygiskApi<Version>, _: JNIEnv) {}
+    fn on_load(&self, _: ZygiskApi<'_, Version>, _: JNIEnv<'_>) {}
 
-    fn pre_app_specialize(
-        &self,
-        _: ZygiskApi<Version>,
-        _: JNIEnv,
-        _: &mut Version::AppSpecializeArgs<'_>,
+    fn pre_app_specialize<'a>(
+        &'a self,
+        _: ZygiskApi<'a, Version>,
+        _: JNIEnv<'a>,
+        _: &'a mut <Version as ZygiskRaw<'_>>::AppSpecializeArgs,
     ) {
     }
 
-    fn post_app_specialize(
-        &self,
-        _: ZygiskApi<Version>,
-        _: JNIEnv,
-        _: &Version::AppSpecializeArgs<'_>,
+    fn post_app_specialize<'a>(
+        &'a self,
+        _: ZygiskApi<'a, Version>,
+        _: JNIEnv<'a>,
+        _: &'a <Version as ZygiskRaw<'_>>::AppSpecializeArgs,
     ) {
     }
 
-    fn pre_server_specialize(
-        &self,
-        _: ZygiskApi<Version>,
-        _: JNIEnv,
-        _: &mut Version::ServerSpecializeArgs<'_>,
+    fn pre_server_specialize<'a>(
+        &'a self,
+        _: ZygiskApi<'a, Version>,
+        _: JNIEnv<'a>,
+        _: &'a mut <Version as ZygiskRaw<'_>>::ServerSpecializeArgs,
     ) {
     }
 
-    fn post_server_specialize(
-        &self,
-        _: ZygiskApi<Version>,
-        _: JNIEnv,
-        _: &Version::ServerSpecializeArgs<'_>,
+    fn post_server_specialize<'a>(
+        &'a self,
+        _: ZygiskApi<'a, Version>,
+        _: JNIEnv<'a>,
+        _: &'a <Version as ZygiskRaw<'_>>::ServerSpecializeArgs,
     ) {
     }
 }
 
 #[doc(hidden)]
-#[inline(always)]
-pub fn module_entry<'a, Version>(
-    inner: &'a dyn ZygiskModule<Version>,
-    api_table: *const Version::RawApiTable<'a>,
-    jni_env: *mut jni::sys::JNIEnv,
+pub fn module_entry<'a, Version, ModuleImpl>(
+    dispatch: &'a ModuleImpl,
+    api_table: RawApiTable<'a, Version>,
+    jni_env: JNIEnv<'a>,
 ) where
-    Version: ZygiskRaw<ModuleAbi<'a> = raw::ModuleAbi<'a, Version>> + 'a,
+    for<'b> Version: ZygiskRaw<'b, ModuleAbi = raw::ModuleAbi<'b, Version>> + 'b,
+    ModuleImpl: ZygiskModule<Version>,
 {
     let raw_module = Box::new(raw::RawModule::<'a> {
-        inner,
+        dispatch,
         api_table,
-        jni_env,
+        jni_env: unsafe { jni_env.unsafe_clone() },
     });
-    let api_table: &'a Version::RawApiTable<'a> = unsafe { &*api_table.cast() };
-    let env: JNIEnv<'a> = unsafe { JNIEnv::from_raw(jni_env.cast()).unwrap_unchecked() };
-    let mut abi = Version::abi_from_module(Box::leak(raw_module));
-
-    if let Some(f) = Version::register_module_fn(api_table) {
-        if f(api_table, &mut abi) {
+    if let Some(f) = Version::register_module_fn(unsafe { api_table.0.as_ref().unwrap_unchecked() })
+    {
+        if f(api_table.0, Version::abi_from_module(Box::leak(raw_module))) {
             let api = ZygiskApi::<Version>(api_table);
-            inner.on_load(api, env);
+            dispatch.on_load(api, jni_env);
         }
     }
 }
@@ -80,21 +77,17 @@ pub fn module_entry<'a, Version>(
 #[macro_export]
 macro_rules! register_module {
     ($module:expr) => {
-        #[allow(no_mangle_generic_items)]
         #[no_mangle]
-        pub extern "C" fn zygisk_module_entry(
-            api_table: *const (),
-            jni_env: *mut $crate::jni::sys::JNIEnv,
+        pub extern "C" fn zygisk_module_entry<'a>(
+            api_table: *const ::std::marker::PhantomData<&'a ()>,
+            jni_env: $crate::jni::JNIEnv,
         ) {
-            struct TypeChecking<T, U>(T, ::std::marker::PhantomData<U>)
-            where
-                T: $crate::ZygiskModule<U>,
-                U: $crate::raw::ZygiskRaw;
-
-            let m = TypeChecking($module, ::std::marker::PhantomData);
-
             if ::std::panic::catch_unwind(|| {
-                $crate::module_entry(&(m.0), api_table.cast(), jni_env);
+                $crate::module_entry(
+                    $module,
+                    $crate::raw::RawApiTable::from_ptr(api_table.cast()),
+                    jni_env,
+                );
             })
             .is_err()
             {

@@ -20,9 +20,9 @@ pub(crate) mod transparent {
     }
 }
 #[repr(C)]
-pub struct RawApiTable<'a> {
+pub struct RawApiTable {
     pub this: *mut (),
-    pub register_module_fn: Option<extern "C" fn(*const Self, *mut ModuleAbi<'a, V2>) -> bool>,
+    pub register_module_fn: Option<for<'b> extern "C" fn(*const Self, ModuleAbi<'b, V2>) -> bool>,
 
     pub hook_jni_native_methods_fn:
         Option<extern "C" fn(*mut JNIEnv, *const c_char, *mut JNINativeMethod, c_int)>,
@@ -37,54 +37,54 @@ pub struct RawApiTable<'a> {
     pub get_flags_fn: Option<extern "C" fn(*const ()) -> u32>,
 }
 
-impl ZygiskRaw for V2 {
+impl<'a> ZygiskRaw<'a> for V2 {
     const API_VERSION: c_long = 2;
-    type RawApiTable<'a> = RawApiTable<'a>;
-    type ModuleAbi<'a> = ModuleAbi<'a, V2>;
-    type AppSpecializeArgs<'a> = transparent::AppSpecializeArgs<'a>;
-    type ServerSpecializeArgs<'a> = transparent::ServerSpecializeArgs<'a>;
+    type RawApiTable = RawApiTable;
+    type ModuleAbi = ModuleAbi<'a, V2>;
+    type AppSpecializeArgs = transparent::AppSpecializeArgs<'a>;
+    type ServerSpecializeArgs = transparent::ServerSpecializeArgs<'a>;
 
-    fn abi_from_module<'a>(module: &'a mut super::RawModule<'a, V2>) -> Self::ModuleAbi<'a> {
-        extern "C" fn pre_app_specialize(
-            m: &mut RawModule<V2>,
-            args: &mut transparent::AppSpecializeArgs<'_>,
+    fn abi_from_module(module: &'a mut super::RawModule<'a, V2>) -> Self::ModuleAbi {
+        extern "C" fn pre_app_specialize<'a>(
+            m: &mut RawModule<'a, V2>,
+            args: &'a mut transparent::AppSpecializeArgs<'a>,
         ) {
-            m.inner.pre_app_specialize(
-                ZygiskApi::<V2>(unsafe { &*m.api_table }),
-                unsafe { jni::JNIEnv::from_raw(m.jni_env).unwrap_unchecked() },
+            m.dispatch.pre_app_specialize(
+                ZygiskApi::<V2>(m.api_table),
+                unsafe { m.jni_env.unsafe_clone() },
                 args,
             );
         }
 
-        extern "C" fn post_app_specialize(
-            m: &mut RawModule<V2>,
-            args: &transparent::AppSpecializeArgs<'_>,
+        extern "C" fn post_app_specialize<'a>(
+            m: &mut RawModule<'a, V2>,
+            args: &'a transparent::AppSpecializeArgs<'a>,
         ) {
-            m.inner.post_app_specialize(
-                ZygiskApi::<V2>(unsafe { &*m.api_table }),
-                unsafe { jni::JNIEnv::from_raw(m.jni_env).unwrap_unchecked() },
+            m.dispatch.post_app_specialize(
+                ZygiskApi::<V2>(m.api_table),
+                unsafe { m.jni_env.unsafe_clone() },
                 args,
             );
         }
 
-        extern "C" fn pre_server_specialize(
-            m: &mut RawModule<V2>,
-            args: &mut transparent::ServerSpecializeArgs<'_>,
+        extern "C" fn pre_server_specialize<'a>(
+            m: &mut RawModule<'a, V2>,
+            args: &'a mut transparent::ServerSpecializeArgs<'a>,
         ) {
-            m.inner.pre_server_specialize(
-                ZygiskApi::<V2>(unsafe { &*m.api_table }),
-                unsafe { jni::JNIEnv::from_raw(m.jni_env).unwrap_unchecked() },
+            m.dispatch.pre_server_specialize(
+                ZygiskApi::<V2>(m.api_table),
+                unsafe { m.jni_env.unsafe_clone() },
                 args,
             );
         }
 
-        extern "C" fn post_server_specialize(
-            m: &mut RawModule<V2>,
-            args: &transparent::ServerSpecializeArgs<'_>,
+        extern "C" fn post_server_specialize<'a>(
+            m: &mut RawModule<'a, V2>,
+            args: &'a transparent::ServerSpecializeArgs<'a>,
         ) {
-            m.inner.post_server_specialize(
-                ZygiskApi::<V2>(unsafe { &*m.api_table }),
-                unsafe { jni::JNIEnv::from_raw(m.jni_env).unwrap_unchecked() },
+            m.dispatch.post_server_specialize(
+                ZygiskApi::<V2>(m.api_table),
+                unsafe { m.jni_env.unsafe_clone() },
                 args,
             );
         }
@@ -99,9 +99,9 @@ impl ZygiskRaw for V2 {
         }
     }
 
-    fn register_module_fn<'a>(
-        table: &'a Self::RawApiTable<'a>,
-    ) -> Option<extern "C" fn(*const Self::RawApiTable<'a>, *mut ModuleAbi<'a, V2>) -> bool> {
+    fn register_module_fn(
+        table: &'a Self::RawApiTable,
+    ) -> Option<for<'b> extern "C" fn(*const Self::RawApiTable, ModuleAbi<'b, V2>) -> bool> {
         table.register_module_fn
     }
 }

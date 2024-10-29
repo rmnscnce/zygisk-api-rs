@@ -1,9 +1,9 @@
-use std::panic::RefUnwindSafe;
+use std::marker::PhantomData;
 
-use jni::sys::JNIEnv;
+use jni::JNIEnv;
 use libc::c_long;
 
-use crate::{api::ZygiskSpec, impl_sealing::Sealed, ZygiskModule};
+use crate::{api::ZygiskSpec, ZygiskModule};
 
 pub mod v1;
 pub mod v2;
@@ -13,48 +13,78 @@ mod v5;
 
 pub struct RawModule<'a, Version>
 where
-    Version: ZygiskRaw + ?Sized,
+    Version: ZygiskRaw<'a> + 'a,
 {
-    pub(crate) inner: &'a dyn ZygiskModule<Version>,
-    pub(crate) api_table: *const <Version as ZygiskRaw>::RawApiTable<'a>,
-    pub(crate) jni_env: *mut JNIEnv,
+    pub(crate) dispatch: &'a dyn ZygiskModule<Version>,
+    pub(crate) api_table: RawApiTable<'a, Version>,
+    pub(crate) jni_env: JNIEnv<'a>,
+}
+
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+pub struct RawApiTable<'a, Version>(
+    pub(crate) *const <Version as ZygiskRaw<'a>>::RawApiTable,
+    PhantomData<&'a Version>,
+)
+where
+    Version: ZygiskRaw<'a> + 'a;
+
+impl<'a, Version> RawApiTable<'a, Version>
+where
+    Version: ZygiskRaw<'a> + 'a,
+{
+    pub fn from_ptr(ptr: *const <Version as ZygiskRaw<'a>>::RawApiTable) -> Self {
+        Self(ptr, PhantomData)
+    }
 }
 
 #[repr(C)]
 pub struct ModuleAbi<'a, Version>
 where
-    Version: ZygiskRaw + ?Sized + 'a,
+    Version: ZygiskRaw<'a> + 'a,
 {
     pub(crate) api_version: c_long,
     pub(crate) this: &'a mut RawModule<'a, Version>,
 
-    pub(crate) pre_app_specialize_fn:
-        extern "C" fn(&mut RawModule<Version>, &mut <Version as ZygiskRaw>::AppSpecializeArgs<'_>),
-    pub(crate) post_app_specialize_fn:
-        extern "C" fn(&mut RawModule<Version>, &<Version as ZygiskRaw>::AppSpecializeArgs<'_>),
-    pub(crate) pre_server_specialize_fn: extern "C" fn(
-        &mut RawModule<Version>,
-        &mut <Version as ZygiskRaw>::ServerSpecializeArgs<'_>,
+    pub(crate) pre_app_specialize_fn: for<'c, 'd> extern "C" fn(
+        &'d mut RawModule<'c, Version>,
+        &'c mut <Version as ZygiskRaw<'c>>::AppSpecializeArgs,
     ),
-    pub(crate) post_server_specialize_fn:
-        extern "C" fn(&mut RawModule<Version>, &<Version as ZygiskRaw>::ServerSpecializeArgs<'_>),
+    pub(crate) post_app_specialize_fn: for<'c, 'd> extern "C" fn(
+        &'d mut RawModule<'c, Version>,
+        &'c <Version as ZygiskRaw<'c>>::AppSpecializeArgs,
+    ),
+    pub(crate) pre_server_specialize_fn: for<'c, 'd> extern "C" fn(
+        &'d mut RawModule<'c, Version>,
+        &'c mut <Version as ZygiskRaw<'c>>::ServerSpecializeArgs,
+    ),
+    pub(crate) post_server_specialize_fn: for<'c, 'd> extern "C" fn(
+        &'d mut RawModule<'c, Version>,
+        &'c <Version as ZygiskRaw<'c>>::ServerSpecializeArgs,
+    ),
 }
 
-pub trait ZygiskRaw
+#[repr(transparent)]
+pub struct RawModuleAbi<'a, Version>(
+    pub(crate) *mut ModuleAbi<'a, Version>,
+    PhantomData<&'a Version>,
+)
 where
-    Self: ZygiskSpec + Sealed,
+    for<'b> Version: ZygiskRaw<'b> + 'b;
+
+pub trait ZygiskRaw<'a>
+where
+    Self: ZygiskSpec,
 {
     const API_VERSION: c_long;
-    type RawApiTable<'a>: RefUnwindSafe;
-    type ModuleAbi<'a>
-    where
-        Self: 'a;
-    type AppSpecializeArgs<'a>;
-    type ServerSpecializeArgs<'a>;
+    type RawApiTable: 'a;
+    type ModuleAbi: 'a;
+    type AppSpecializeArgs: 'a;
+    type ServerSpecializeArgs: 'a;
 
-    fn abi_from_module<'a>(module: &'a mut RawModule<'a, Self>) -> Self::ModuleAbi<'a>;
+    fn abi_from_module(module: &'a mut RawModule<'a, Self>) -> <Self as ZygiskRaw<'a>>::ModuleAbi;
 
-    fn register_module_fn<'a>(
-        table: &'a Self::RawApiTable<'a>,
-    ) -> Option<extern "C" fn(*const Self::RawApiTable<'a>, *mut ModuleAbi<'a, Self>) -> bool>;
+    fn register_module_fn(
+        table: &'a Self::RawApiTable,
+    ) -> Option<for<'b> extern "C" fn(*const Self::RawApiTable, ModuleAbi<'b, Self>) -> bool>;
 }

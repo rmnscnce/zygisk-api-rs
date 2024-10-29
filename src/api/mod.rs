@@ -17,7 +17,6 @@ where
     Self: Sealed,
     <Self as ZygiskApiSpec>::Spec: ZygiskApiSpec,
 {
-    #[doc(hidden)]
     type Spec;
 }
 

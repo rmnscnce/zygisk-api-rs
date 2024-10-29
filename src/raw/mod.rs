@@ -1,3 +1,5 @@
+use std::panic::RefUnwindSafe;
+
 use jni::sys::JNIEnv;
 use libc::c_long;
 
@@ -47,7 +49,7 @@ where
     Self: ZygiskApiSpec + Sealed,
 {
     const API_VERSION: c_long;
-    type RawApiTable<'a>;
+    type RawApiTable<'a>: RefUnwindSafe;
     type ModuleAbi<'a>
     where
         Self: 'a;

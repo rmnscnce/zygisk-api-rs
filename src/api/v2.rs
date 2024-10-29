@@ -16,7 +16,9 @@ pub struct V2;
 
 impl Sealed for V2 {}
 
-impl ZygiskApiSpec for V2 {}
+impl ZygiskApiSpec for V2 {
+    type Spec = V2;
+}
 
 impl<'a> super::ZygiskApi<'a, V2> {
     pub fn connect_companion(&self) -> Result<UnixStream, ZygiskError> {

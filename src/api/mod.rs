@@ -15,7 +15,10 @@ mod v5;
 pub trait ZygiskApiSpec
 where
     Self: Sealed,
+    <Self as ZygiskApiSpec>::Spec: ZygiskApiSpec,
 {
+    #[doc(hidden)]
+    type Spec;
 }
 
 pub struct ZygiskApi<'a, Version>(pub(crate) &'a Version::RawApiTable<'a>)

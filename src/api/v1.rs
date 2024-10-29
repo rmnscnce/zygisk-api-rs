@@ -13,7 +13,9 @@ pub struct V1;
 
 impl Sealed for V1 {}
 
-impl ZygiskApiSpec for V1 {}
+impl ZygiskApiSpec for V1 {
+    type Spec = V1;
+}
 
 impl<'a> super::ZygiskApi<'a, V1> {
     /// Connect to a root companion process and get a Unix domain socket for IPC.

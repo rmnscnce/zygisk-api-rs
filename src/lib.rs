@@ -85,15 +85,15 @@ macro_rules! register_module {
             api_table: *const (),
             jni_env: *mut $crate::aux::jni::sys::JNIEnv,
         ) {
-            struct Module<T, U>(T)
+            struct TypeChecking<T, U>(T)
             where
                 T: $crate::ZygiskModule<U>,
                 U: $crate::raw::ZygiskRawApi;
 
-            let m = Module($module);
+            let m = TypeChecking($module);
 
             if ::std::panic::catch_unwind(|| {
-                $crate::module_entry(&m.0, api_table.cast(), jni_env);
+                $crate::module_entry(&(m.0), api_table.cast(), jni_env);
             })
             .is_err()
             {

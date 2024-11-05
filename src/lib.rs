@@ -81,10 +81,12 @@ macro_rules! register_module {
     ($module:expr) => {
         #[doc(hidden)]
         #[no_mangle]
-        pub extern "C" fn zygisk_module_entry<'a>(
-            api_table: ::std::ptr::NonNull<::std::marker::PhantomData<&'a ()>>,
+        pub unsafe extern "C" fn zygisk_module_entry<'a>(
+            api_table: ::std::ptr::NonNull<::std::marker::PhantomData<'&'a ()>>,
             jni_env: $crate::jni::JNIEnv,
         ) {
+            let api_table = ::std::ptr::NonNull::new_unchecked(api_table.as_ptr().cast());
+
             if ::std::panic::catch_unwind(|| {
                 $crate::module_entry(
                     $module,
@@ -105,7 +107,7 @@ macro_rules! register_companion {
     ($func: expr) => {
         #[doc(hidden)]
         #[no_mangle]
-        extern "C" fn zygisk_companion_entry(socket_fd: ::std::os::unix::io::RawFd) {
+        pub extern "C" fn zygisk_companion_entry(socket_fd: ::std::os::unix::io::RawFd) {
             // SAFETY: it is guaranteed by zygiskd that the argument is a valid
             // socket fd.
             let stream = unsafe {

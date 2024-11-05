@@ -88,7 +88,7 @@ macro_rules! register_module {
             if ::std::panic::catch_unwind(|| {
                 $crate::module_entry(
                     $module,
-                    $crate::raw::RawApiTable::from_ptr(api_table.cast()),
+                    $crate::raw::RawApiTable::from_non_null(api_table),
                     jni_env,
                 );
             })

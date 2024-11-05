@@ -82,7 +82,7 @@ macro_rules! register_module {
         #[doc(hidden)]
         #[no_mangle]
         pub unsafe extern "C" fn zygisk_module_entry<'a>(
-            api_table: ::std::ptr::NonNull<::std::marker::PhantomData<'&'a ()>>,
+            api_table: ::std::ptr::NonNull<::std::marker::PhantomData<&'a ()>>,
             jni_env: $crate::jni::JNIEnv,
         ) {
             let api_table = ::std::ptr::NonNull::new_unchecked(api_table.as_ptr().cast());

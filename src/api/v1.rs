@@ -1,13 +1,11 @@
 use std::{
     os::{fd::FromRawFd, unix::net::UnixStream},
-    ptr,
+    ptr::{self, NonNull},
 };
 
 use jni::{strings::JNIStr, sys::JNINativeMethod, JNIEnv};
 
 use crate::{error::ZygiskError, impl_sealing::Sealed};
-
-use super::ZygiskSpec;
 
 pub use crate::raw::v1::transparent::*;
 
@@ -15,10 +13,6 @@ pub use crate::raw::v1::transparent::*;
 pub struct V1;
 
 impl Sealed for V1 {}
-
-impl ZygiskSpec for V1 {
-    type Spec = V1;
-}
 
 impl super::ZygiskApi<'_, V1> {
     /// Connect to a root companion process and get a Unix domain socket for IPC.
@@ -39,11 +33,7 @@ impl super::ZygiskApi<'_, V1> {
     pub fn connect_companion(&self) -> Result<UnixStream, ZygiskError> {
         let api_dispatch = unsafe { self.dispatch() };
 
-        match api_dispatch
-            .connect_companion_fn
-            .map(|f| f(api_dispatch.this))
-            .unwrap_or(-1)
-        {
+        match unsafe { (api_dispatch.connect_companion_fn)(api_dispatch.base.this) } {
             -1 => Err(ZygiskError::ConnectCompanionError),
             fd => Ok(unsafe { UnixStream::from_raw_fd(fd) }),
         }
@@ -55,9 +45,7 @@ impl super::ZygiskApi<'_, V1> {
     pub fn set_option(&self, option: ZygiskOption) {
         let api_dispatch = unsafe { self.dispatch() };
 
-        if let Some(f) = api_dispatch.set_option_fn {
-            f(api_dispatch.this, option);
-        }
+        unsafe { (api_dispatch.set_option_fn)(api_dispatch.base.this, option) };
     }
 
     /// Hook JNI native methods for a Java class.
@@ -81,14 +69,12 @@ impl super::ZygiskApi<'_, V1> {
     ) {
         let methods = methods.as_mut();
 
-        if let Some(func) = self.dispatch().hook_jni_native_methods_fn {
-            func(
-                env,
-                class_name.as_ptr(),
-                methods.as_mut_ptr(),
-                methods.len() as _,
-            );
-        }
+        (self.dispatch().hook_jni_native_methods_fn)(
+            env,
+            class_name.as_ptr(),
+            NonNull::new_unchecked(methods.as_mut_ptr()),
+            methods.len() as _,
+        );
     }
 
     /// Hook functions in the PLT (Procedure Linkage Table) of ELFs loaded in memory.
@@ -113,20 +99,24 @@ impl super::ZygiskApi<'_, V1> {
         &self,
         regex: S,
         symbol: S,
-        new_func: *mut (),
-        old_func: Option<*mut *mut ()>,
-    ) {
+        new_func: NonNull<()>,
+    ) -> NonNull<()> {
         let regex = regex.as_ref();
         let symbol = symbol.as_ref();
 
-        if let Some(func) = self.dispatch().plt_hook_register_fn {
-            func(
-                regex.as_ptr().cast(),
-                symbol.as_ptr().cast(),
-                new_func,
-                old_func.unwrap_or(ptr::null_mut()),
-            );
-        }
+        let mut old_func = NonNull::dangling();
+
+        (self.dispatch().plt_hook_register_fn)(
+            regex.as_ptr().cast(),
+            match symbol.is_empty() {
+                true => ptr::null(),
+                false => symbol.as_ptr().cast(),
+            },
+            new_func,
+            Some(NonNull::new_unchecked(&mut old_func as *mut _)),
+        );
+
+        old_func
     }
 
     /// For ELFs loaded in memory matching `regex`, exclude hooks registered for `symbol`.
@@ -135,8 +125,8 @@ impl super::ZygiskApi<'_, V1> {
         let regex = regex.as_ref();
         let symbol = symbol.as_ref();
 
-        if let Some(func) = unsafe { self.dispatch() }.plt_hook_exclude_fn {
-            func(
+        unsafe {
+            (self.dispatch().plt_hook_exclude_fn)(
                 regex.as_ptr().cast(),
                 match symbol.is_empty() {
                     true => ptr::null(),
@@ -150,8 +140,8 @@ impl super::ZygiskApi<'_, V1> {
     ///
     /// Returns [`ZygiskError::PltHookCommitError`] if any error occurs.
     pub fn plt_hook_commit(&self) -> Result<(), ZygiskError> {
-        match unsafe { self.dispatch() }.plt_hook_commit_fn.map(|f| f()) {
-            Some(true) => Ok(()),
+        match unsafe { (self.dispatch().plt_hook_commit_fn)() } {
+            true => Ok(()),
             _ => Err(ZygiskError::PltHookCommitError),
         }
     }

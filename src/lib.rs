@@ -1,3 +1,5 @@
+use std::ptr::NonNull;
+
 use api::ZygiskApi;
 use jni::JNIEnv;
 use raw::{RawApiTable, RawModuleAbi, ZygiskRaw};
@@ -57,7 +59,7 @@ pub fn module_entry<'a, Version, ModuleImpl>(
     api_table: RawApiTable<'a, Version>,
     jni_env: JNIEnv<'a>,
 ) where
-    for<'b> Version: ZygiskRaw<'b, ModuleAbi = raw::ModuleAbi<'b, Version>> + 'b,
+    for<'b> Version: ZygiskRaw<'b>,
     ModuleImpl: ZygiskModule<Version>,
 {
     let raw_module = Box::leak(Box::new(raw::RawModule::<'a> {
@@ -65,22 +67,22 @@ pub fn module_entry<'a, Version, ModuleImpl>(
         api_table,
         jni_env: unsafe { jni_env.unsafe_clone() },
     }));
-    if let Some(f) = Version::register_module_fn(unsafe { api_table.0.as_ref().unwrap_unchecked() })
-    {
-        let abi = RawModuleAbi::from_ptr(Box::leak(Box::new(Version::abi_from_module(raw_module))));
-        if f(api_table.0, abi) {
-            let api = ZygiskApi::<Version>(api_table);
-            dispatch.on_load(api, jni_env);
-        }
+    let abi = RawModuleAbi::from_non_null(unsafe {
+        NonNull::new_unchecked(Box::leak(Box::new(Version::abi_from_module(raw_module))))
+    });
+    if unsafe { Version::register_module_fn(api_table.0.as_ref())(api_table.0, abi) } {
+        let api = ZygiskApi::<Version>(api_table);
+        dispatch.on_load(api, jni_env);
     }
 }
 
 #[macro_export]
 macro_rules! register_module {
     ($module:expr) => {
+        #[doc(hidden)]
         #[no_mangle]
         pub extern "C" fn zygisk_module_entry<'a>(
-            api_table: *const ::std::marker::PhantomData<&'a ()>,
+            api_table: ::std::ptr::NonNull<::std::marker::PhantomData<&'a ()>>,
             jni_env: $crate::jni::JNIEnv,
         ) {
             if ::std::panic::catch_unwind(|| {
@@ -101,6 +103,7 @@ macro_rules! register_module {
 #[macro_export]
 macro_rules! register_companion {
     ($func: expr) => {
+        #[doc(hidden)]
         #[no_mangle]
         extern "C" fn zygisk_companion_entry(socket_fd: ::std::os::unix::io::RawFd) {
             // SAFETY: it is guaranteed by zygiskd that the argument is a valid

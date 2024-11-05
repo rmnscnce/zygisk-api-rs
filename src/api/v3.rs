@@ -3,14 +3,12 @@ use std::{
         fd::{FromRawFd, RawFd},
         unix::net::UnixStream,
     },
-    ptr,
+    ptr::{self, NonNull},
 };
 
 use jni::{strings::JNIStr, sys::JNINativeMethod, JNIEnv};
 
 use crate::{error::ZygiskError, impl_sealing::Sealed};
-
-use super::ZygiskSpec;
 
 pub use crate::raw::v3::transparent::*;
 
@@ -19,19 +17,11 @@ pub struct V3;
 
 impl Sealed for V3 {}
 
-impl ZygiskSpec for V3 {
-    type Spec = V3;
-}
-
 impl super::ZygiskApi<'_, V3> {
     pub fn connect_companion(&self) -> Result<UnixStream, ZygiskError> {
         let api_dispatch = unsafe { self.dispatch() };
 
-        match api_dispatch
-            .connect_companion_fn
-            .map(|f| f(api_dispatch.this))
-            .unwrap_or(-1)
-        {
+        match unsafe { (api_dispatch.connect_companion_fn)(api_dispatch.base.this) } {
             -1 => Err(ZygiskError::ConnectCompanionError),
             fd => Ok(unsafe { UnixStream::from_raw_fd(fd) }),
         }
@@ -40,27 +30,24 @@ impl super::ZygiskApi<'_, V3> {
     pub fn get_module_dir(&self) -> RawFd {
         let api_dispatch = unsafe { self.dispatch() };
 
-        api_dispatch.get_module_dir_fn.unwrap()(api_dispatch.this)
+        unsafe { (api_dispatch.get_module_dir_fn)(api_dispatch.base.this) }
     }
 
     pub fn set_option(&self, option: ZygiskOption) {
         let api_dispatch = unsafe { self.dispatch() };
 
-        if let Some(f) = api_dispatch.set_option_fn {
-            f(api_dispatch.this, option);
-        }
+        unsafe { (api_dispatch.set_option_fn)(api_dispatch.base.this, option) }
     }
 
-    pub fn get_flags(&self) -> StateFlags {
+    pub fn get_flags(&self) -> Result<StateFlags, ZygiskError> {
         let api_dispatch = unsafe { self.dispatch() };
 
-        api_dispatch
-            .get_flags_fn
-            .map(|f| f(api_dispatch.this))
-            .map(|raw| StateFlags::from_bits(raw).expect("unsupported flag returned by Zygisk"))
-            .unwrap_or(StateFlags::empty())
+        match StateFlags::from_bits(unsafe { (api_dispatch.get_flags_fn)(api_dispatch.base.this) })
+        {
+            Some(flags) => Ok(flags),
+            None => Err(ZygiskError::UnrecognizedStateFlag),
+        }
     }
-
     pub unsafe fn hook_jni_native_methods<'other_local, M: AsMut<[JNINativeMethod]>>(
         &self,
         env: JNIEnv,
@@ -69,45 +56,56 @@ impl super::ZygiskApi<'_, V3> {
     ) {
         let methods = methods.as_mut();
 
-        if let Some(func) = self.dispatch().hook_jni_native_methods_fn {
-            func(
-                env,
-                class_name.as_ptr(),
-                methods.as_mut_ptr(),
-                methods.len() as _,
-            );
-        }
+        (self.dispatch().hook_jni_native_methods_fn)(
+            env,
+            class_name.as_ptr(),
+            NonNull::new_unchecked(methods.as_mut_ptr()),
+            methods.len() as _,
+        );
     }
 
     pub unsafe fn plt_hook_register<S: AsRef<str>>(
         &self,
         regex: S,
         symbol: S,
-        new_func: *mut (),
-        old_func: Option<*mut *mut ()>,
-    ) {
-        if let Some(func) = self.dispatch().plt_hook_register_fn {
-            func(
-                regex.as_ref().as_ptr() as *const _,
-                symbol.as_ref().as_ptr() as *const _,
-                new_func,
-                old_func.unwrap_or(ptr::null_mut()),
-            );
-        }
+        replacement: NonNull<()>,
+    ) -> NonNull<()> {
+        let regex = regex.as_ref();
+        let symbol = symbol.as_ref();
+
+        let mut original = NonNull::dangling();
+
+        (self.dispatch().plt_hook_register_fn)(
+            regex.as_ptr().cast(),
+            match symbol.is_empty() {
+                true => ptr::null(),
+                false => symbol.as_ptr().cast(),
+            },
+            replacement,
+            Some(NonNull::new_unchecked(&mut original as *mut _)),
+        );
+
+        original
     }
 
     pub unsafe fn plt_hook_exclude<S: AsRef<str>>(&self, regex: S, symbol: S) {
-        if let Some(func) = self.dispatch().plt_hook_exclude_fn {
-            func(
-                regex.as_ref().as_ptr() as *const _,
-                symbol.as_ref().as_ptr() as *const _,
+        let regex = regex.as_ref();
+        let symbol = symbol.as_ref();
+
+        unsafe {
+            (self.dispatch().plt_hook_exclude_fn)(
+                regex.as_ptr().cast(),
+                match symbol.is_empty() {
+                    true => ptr::null(),
+                    false => symbol.as_ptr().cast(),
+                },
             );
         }
     }
 
     pub fn plt_hook_commit(&self) -> Result<(), ZygiskError> {
-        match unsafe { self.dispatch() }.plt_hook_commit_fn.map(|f| f()) {
-            Some(true) => Ok(()),
+        match unsafe { (self.dispatch().plt_hook_commit_fn)() } {
+            true => Ok(()),
             _ => Err(ZygiskError::PltHookCommitError),
         }
     }

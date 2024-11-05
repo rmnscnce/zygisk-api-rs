@@ -1,7 +1,4 @@
-use crate::{
-    impl_sealing::Sealed,
-    raw::{RawApiTable, ZygiskRaw},
-};
+use crate::raw::{RawApiTable, ZygiskRaw};
 
 pub mod v1;
 pub use v1::V1;
@@ -12,17 +9,11 @@ pub use v2::V2;
 pub mod v3;
 pub use v3::V3;
 
-mod v4;
+pub mod v4;
+pub use v4::V4;
 
-mod v5;
-
-pub trait ZygiskSpec
-where
-    Self: Clone + Copy + Sealed + Sized,
-    <Self as ZygiskSpec>::Spec: ZygiskSpec,
-{
-    type Spec;
-}
+pub mod v5;
+pub use v5::V5;
 
 #[repr(transparent)]
 pub struct ZygiskApi<'a, Version>(pub(crate) RawApiTable<'a, Version>)
@@ -33,7 +24,7 @@ impl<'a, Version> ZygiskApi<'a, Version>
 where
     Version: ZygiskRaw<'a> + 'a,
 {
-    pub(crate) unsafe fn dispatch(&self) -> &<Version as ZygiskRaw<'a>>::RawApiTable {
-        &*self.0 .0
+    pub(crate) unsafe fn dispatch(&self) -> &<Version as ZygiskRaw<'a>>::ApiTable {
+        &*self.0 .0.as_ptr()
     }
 }

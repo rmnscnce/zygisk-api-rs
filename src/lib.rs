@@ -85,12 +85,12 @@ macro_rules! register_module {
             api_table: ::std::ptr::NonNull<::std::marker::PhantomData<&'a ()>>,
             jni_env: $crate::jni::JNIEnv,
         ) {
-            let api_table = ::std::ptr::NonNull::new_unchecked(api_table.as_ptr().cast());
-
             if ::std::panic::catch_unwind(|| {
                 $crate::module_entry(
                     $module,
-                    $crate::raw::RawApiTable::from_non_null(api_table),
+                    $crate::raw::RawApiTable::from_non_null(::std::ptr::NonNull::new_unchecked(
+                        api_table.as_ptr().cast(),
+                    )),
                     jni_env,
                 );
             })
@@ -108,17 +108,20 @@ macro_rules! register_companion {
         #[doc(hidden)]
         #[no_mangle]
         pub extern "C" fn zygisk_companion_entry(socket_fd: ::std::os::fd::OwnedFd) {
-            // SAFETY: it is guaranteed by zygiskd that the argument is a valid
-            // socket fd.
-            let mut stream = unsafe {
-                <::std::os::unix::net::UnixStream as ::std::convert::From<::std::os::fd::OwnedFd>>::from(
-                    socket_fd,
-                )
-            };
+            if ::std::panic::catch_unwind(|| {
+                // SAFETY: it is guaranteed by zygiskd that the argument is a valid
+                // socket fd.
+                let mut stream = unsafe {
+                    <::std::os::unix::net::UnixStream as ::std::convert::From<
+                        ::std::os::fd::OwnedFd,
+                    >>::from(socket_fd)
+                };
 
-            // Call the actual function.
-            let _type_check: for<'a> fn(&'a mut ::std::os::unix::net::UnixStream) = $func;
-            if ::std::panic::catch_unwind(|| _type_check(&mut stream)).is_err() {
+                let func: for<'a> fn(&'a mut ::std::os::unix::net::UnixStream) = $func;
+                func(&mut stream)
+            })
+            .is_err()
+            {
                 // Panic messages should be displayed by the default panic hook.
                 ::std::process::abort();
             }

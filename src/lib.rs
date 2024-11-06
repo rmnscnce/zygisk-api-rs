@@ -107,18 +107,18 @@ macro_rules! register_companion {
     ($func: expr) => {
         #[doc(hidden)]
         #[no_mangle]
-        pub extern "C" fn zygisk_companion_entry(socket_fd: ::std::os::unix::io::RawFd) {
+        pub extern "C" fn zygisk_companion_entry(socket_fd: ::std::os::fd::OwnedFd) {
             // SAFETY: it is guaranteed by zygiskd that the argument is a valid
             // socket fd.
-            let stream = unsafe {
-                <::std::os::unix::net::UnixStream as ::std::os::fd::FromRawFd>::from_raw_fd(
+            let mut stream = unsafe {
+                <::std::os::unix::net::UnixStream as ::std::convert::From<::std::os::fd::OwnedFd>>::from(
                     socket_fd,
                 )
             };
 
             // Call the actual function.
-            let _type_check: fn(::std::os::unix::net::UnixStream) = $func;
-            if ::std::panic::catch_unwind(|| _type_check(stream)).is_err() {
+            let _type_check: for<'a> fn(&'a mut ::std::os::unix::net::UnixStream) = $func;
+            if ::std::panic::catch_unwind(|| _type_check(&mut stream)).is_err() {
                 // Panic messages should be displayed by the default panic hook.
                 ::std::process::abort();
             }

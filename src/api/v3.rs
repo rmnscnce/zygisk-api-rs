@@ -18,12 +18,15 @@ pub struct V3;
 impl Sealed for V3 {}
 
 impl super::ZygiskApi<'_, V3> {
-    pub fn connect_companion(&self) -> Result<UnixStream, ZygiskError> {
+    pub fn connect_companion(&self) -> Result<&mut UnixStream, ZygiskError> {
         let api_dispatch = unsafe { self.dispatch() };
 
         match unsafe { (api_dispatch.connect_companion_fn)(api_dispatch.base.this) } {
             -1 => Err(ZygiskError::ConnectCompanionError),
-            fd => Ok(unsafe { UnixStream::from_raw_fd(fd) }),
+            fd => {
+                let unix_stream = Box::new(unsafe { UnixStream::from_raw_fd(fd) });
+                Ok(Box::leak(unix_stream))
+            }
         }
     }
 

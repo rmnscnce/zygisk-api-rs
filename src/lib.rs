@@ -100,7 +100,7 @@ pub fn module_entry<'a, Version, ModuleImpl>(
 macro_rules! register_module {
     ($module:expr) => {
         #[doc(hidden)]
-        #[no_mangle]
+        #[unsafe(no_mangle)]
         pub unsafe extern "C" fn zygisk_module_entry<'a>(
             api_table: ::std::ptr::NonNull<::std::marker::PhantomData<&'a ()>>,
             jni_env: $crate::jni::JNIEnv,
@@ -126,7 +126,7 @@ macro_rules! register_module {
 macro_rules! register_companion {
     ($func: expr) => {
         #[doc(hidden)]
-        #[no_mangle]
+        #[unsafe(no_mangle)]
         pub extern "C" fn zygisk_companion_entry(socket_fd: ::std::os::fd::OwnedFd) {
             if ::std::panic::catch_unwind(|| {
                 // SAFETY: it is guaranteed by zygiskd that the argument is a valid

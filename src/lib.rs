@@ -1,4 +1,6 @@
-use std::ptr::NonNull;
+#![warn(clippy::std_instead_of_core)]
+
+use core::ptr::NonNull;
 
 use api::ZygiskApi;
 use jni::JNIEnv;
@@ -7,6 +9,8 @@ use raw::{RawApiTable, RawModuleAbi, ZygiskRaw};
 pub mod api;
 mod aux;
 pub use aux::*;
+use static_alloc::Bump;
+use without_alloc::{alloc::LocalAllocLeakExt, Box};
 pub mod error;
 pub mod raw;
 
@@ -62,14 +66,30 @@ pub fn module_entry<'a, Version, ModuleImpl>(
     for<'b> Version: ZygiskRaw<'b>,
     ModuleImpl: ZygiskModule<Version>,
 {
-    let raw_module = Box::leak(Box::new(raw::RawModule::<'a> {
-        dispatch,
-        api_table,
-        jni_env: unsafe { jni_env.unsafe_clone() },
-    }));
+    // Raw module vtable and ABI has a fixed size, which was done by design to retain compatibility across interface versions
+    // That's why we can pin the ABI and module vtable on version 1, and use it for all versions
+
+    static RAW_MODULE_SLAB: Bump<[raw::RawModule<'static, api::V1>; 2]> = const { Bump::uninit() };
+
+    let raw_module = Box::leak(
+        RAW_MODULE_SLAB
+            .boxed(raw::RawModule::<'a> {
+                dispatch,
+                api_table,
+                jni_env: unsafe { jni_env.unsafe_clone() },
+            })
+            .unwrap(),
+    );
+
+    static ABI_SLAB: Bump<[raw::ModuleAbi<'static, api::V1>; 2]> = const { Bump::uninit() };
     let abi = RawModuleAbi::from_non_null(unsafe {
-        NonNull::new_unchecked(Box::leak(Box::new(Version::abi_from_module(raw_module))))
+        NonNull::new_unchecked(Box::leak(
+            ABI_SLAB
+                .boxed(Version::abi_from_module(raw_module))
+                .unwrap(),
+        ))
     });
+
     if unsafe { Version::register_module_fn(api_table.0.as_ref())(api_table.0, abi) } {
         let api = ZygiskApi::<Version>(api_table);
         dispatch.on_load(api, jni_env);

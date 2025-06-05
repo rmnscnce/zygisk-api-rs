@@ -1,13 +1,13 @@
-use std::{
-    os::{
-        fd::{FromRawFd, RawFd},
-        unix::net::UnixStream,
-    },
-    ptr::NonNull,
+use core::ptr::NonNull;
+use std::os::{
+    fd::{FromRawFd, RawFd},
+    unix::net::UnixStream,
 };
 
 use jni::{strings::JNIStr, sys::JNINativeMethod, JNIEnv};
 use libc::{dev_t, ino_t};
+use static_alloc::Bump;
+use without_alloc::{alloc::LocalAllocLeakExt, Box};
 
 use crate::{error::ZygiskError, impl_sealing::Sealed};
 
@@ -25,7 +25,11 @@ impl super::ZygiskApi<'_, V4> {
         match unsafe { (api_dispatch.connect_companion_fn)(api_dispatch.base.this) } {
             -1 => Err(ZygiskError::ConnectCompanionError),
             fd => {
-                let unix_stream = Box::new(unsafe { UnixStream::from_raw_fd(fd) });
+                static UNIXSTREAM_SLAB: Bump<[UnixStream; 2]> =
+                    const { Bump::uninit() };
+                let unix_stream = UNIXSTREAM_SLAB
+                    .boxed(unsafe { UnixStream::from_raw_fd(fd) })
+                    .unwrap();
                 Ok(Box::leak(unix_stream))
             }
         }
@@ -84,7 +88,7 @@ impl super::ZygiskApi<'_, V4> {
             device,
             inode,
             match symbol.is_empty() {
-                true => std::ptr::null(),
+                true => core::ptr::null(),
                 false => symbol.as_ptr().cast(),
             },
             replacement,

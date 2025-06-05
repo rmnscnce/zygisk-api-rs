@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, ptr::NonNull};
+use core::{marker::PhantomData, ptr::NonNull};
 
 use jni::JNIEnv;
 use libc::c_long;

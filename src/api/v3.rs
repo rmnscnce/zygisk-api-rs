@@ -1,12 +1,14 @@
-use std::{
-    os::{
-        fd::{FromRawFd, RawFd},
-        unix::net::UnixStream,
-    },
-    ptr::{self, NonNull},
+use core::
+    ptr::{self, NonNull}
+;
+use std::os::{
+    fd::{FromRawFd, RawFd},
+    unix::net::UnixStream,
 };
 
 use jni::{strings::JNIStr, sys::JNINativeMethod, JNIEnv};
+use static_alloc::Bump;
+use without_alloc::{alloc::LocalAllocLeakExt, Box};
 
 use crate::{error::ZygiskError, impl_sealing::Sealed};
 
@@ -24,7 +26,11 @@ impl super::ZygiskApi<'_, V3> {
         match unsafe { (api_dispatch.connect_companion_fn)(api_dispatch.base.this) } {
             -1 => Err(ZygiskError::ConnectCompanionError),
             fd => {
-                let unix_stream = Box::new(unsafe { UnixStream::from_raw_fd(fd) });
+                static UNIXSTREAM_SLAB: Bump<[UnixStream; 2]> =
+                    const { Bump::uninit() };
+                let unix_stream = UNIXSTREAM_SLAB
+                    .boxed(unsafe { UnixStream::from_raw_fd(fd) })
+                    .unwrap();
                 Ok(Box::leak(unix_stream))
             }
         }
@@ -51,22 +57,29 @@ impl super::ZygiskApi<'_, V3> {
             None => Err(ZygiskError::UnrecognizedStateFlag),
         }
     }
-    pub unsafe fn hook_jni_native_methods<'other_local, M: AsMut<[JNINativeMethod]>>(
+
+    /// # Safety
+    ///
+    pub unsafe fn hook_jni_native_methods<M: AsMut<[JNINativeMethod]>>(
         &self,
         env: JNIEnv,
-        class_name: &'other_local JNIStr,
+        class_name: &JNIStr,
         mut methods: M,
     ) {
         let methods = methods.as_mut();
 
-        (self.dispatch().hook_jni_native_methods_fn)(
-            env,
-            class_name.as_ptr(),
-            NonNull::new_unchecked(methods.as_mut_ptr()),
-            methods.len() as _,
-        );
+        unsafe {
+            (self.dispatch().hook_jni_native_methods_fn)(
+                env,
+                class_name.as_ptr(),
+                NonNull::new_unchecked(methods.as_mut_ptr()),
+                methods.len() as _,
+            )
+        };
     }
 
+    /// # Safety
+    ///
     pub unsafe fn plt_hook_register<S: AsRef<str>>(
         &self,
         regex: S,

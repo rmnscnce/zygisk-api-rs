@@ -1,4 +1,4 @@
-use std::ptr::NonNull;
+use core::ptr::NonNull;
 
 use jni::{sys::JNINativeMethod, JNIEnv};
 use libc::{c_char, c_int, c_long};
@@ -6,7 +6,6 @@ use libc::{c_char, c_int, c_long};
 use crate::api::{ZygiskApi, V1};
 
 use super::{BaseApi, Instance, ModuleAbi, RawModule, RawModuleAbi, ZygiskRaw};
-
 pub(crate) mod transparent {
     use jni::{
         objects::JString,

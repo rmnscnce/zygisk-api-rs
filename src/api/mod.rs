@@ -1,4 +1,6 @@
-use crate::raw::{RawApiTable, ZygiskRaw};
+use crate::
+    raw::{RawApiTable, ZygiskRaw}
+;
 
 pub mod v1;
 pub use v1::V1;
@@ -25,6 +27,6 @@ where
     Version: ZygiskRaw<'a> + 'a,
 {
     pub(crate) unsafe fn dispatch(&self) -> &<Version as ZygiskRaw<'a>>::ApiTable {
-        &*self.0 .0.as_ptr()
+        unsafe { &*self.0 .0.as_ptr() }
     }
 }

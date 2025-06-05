@@ -1,9 +1,11 @@
-use std::{
-    os::{fd::FromRawFd, unix::net::UnixStream},
-    ptr::{self, NonNull},
-};
+use core::
+    ptr::{self, NonNull}
+;
+use std::os::{fd::FromRawFd, unix::net::UnixStream};
 
 use jni::{strings::JNIStr, sys::JNINativeMethod, JNIEnv};
+use static_alloc::Bump;
+use without_alloc::{alloc::LocalAllocLeakExt, Box};
 
 use crate::{error::ZygiskError, impl_sealing::Sealed};
 
@@ -36,7 +38,11 @@ impl super::ZygiskApi<'_, V1> {
         match unsafe { (api_dispatch.connect_companion_fn)(api_dispatch.base.this) } {
             -1 => Err(ZygiskError::ConnectCompanionError),
             fd => {
-                let unix_stream = Box::new(unsafe { UnixStream::from_raw_fd(fd) });
+                static UNIXSTREAM_SLAB: Bump<[UnixStream; 2]> =
+                    const { Bump::uninit() };
+                let unix_stream = UNIXSTREAM_SLAB
+                    .boxed(unsafe { UnixStream::from_raw_fd(fd) })
+                    .unwrap();
                 Ok(Box::leak(unix_stream))
             }
         }
@@ -72,10 +78,10 @@ impl super::ZygiskApi<'_, V1> {
     ) {
         let methods = methods.as_mut();
 
-        (self.dispatch().hook_jni_native_methods_fn)(
+        (unsafe { self.dispatch().hook_jni_native_methods_fn })(
             env,
             class_name.as_ptr(),
-            NonNull::new_unchecked(methods.as_mut_ptr()),
+            unsafe { NonNull::new_unchecked(methods.as_mut_ptr()) },
             methods.len() as _,
         );
     }
@@ -109,7 +115,7 @@ impl super::ZygiskApi<'_, V1> {
 
         let mut old_func = NonNull::dangling();
 
-        (self.dispatch().plt_hook_register_fn)(
+        unsafe { (self.dispatch().plt_hook_register_fn)(
             regex.as_ptr().cast(),
             match symbol.is_empty() {
                 true => ptr::null(),
@@ -117,7 +123,7 @@ impl super::ZygiskApi<'_, V1> {
             },
             new_func,
             Some(NonNull::new_unchecked(&mut old_func as *mut _)),
-        );
+        ) };
 
         old_func
     }

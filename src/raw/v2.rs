@@ -1,4 +1,4 @@
-use std::ptr::NonNull;
+use core::ptr::NonNull;
 
 use jni::{sys::JNINativeMethod, JNIEnv};
 use libc::{c_char, c_int, c_long};
@@ -43,7 +43,7 @@ impl<'a> ZygiskRaw<'a> for V2 {
     type AppSpecializeArgs = transparent::AppSpecializeArgs<'a>;
     type ServerSpecializeArgs = transparent::ServerSpecializeArgs<'a>;
 
-    fn abi_from_module(module: &'a mut super::RawModule<'a, V2>) -> ModuleAbi<'_, V2> {
+    fn abi_from_module(module: &'a mut super::RawModule<'a, V2>) -> ModuleAbi<'a, Self> {
         extern "C" fn pre_app_specialize<'a>(
             m: &mut RawModule<'a, V2>,
             args: &'a mut transparent::AppSpecializeArgs<'a>,

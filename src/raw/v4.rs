@@ -1,4 +1,4 @@
-use std::ptr::NonNull;
+use core::ptr::NonNull;
 
 use jni::{sys::JNINativeMethod, JNIEnv};
 use libc::{c_char, c_int, c_long, dev_t, ino_t};

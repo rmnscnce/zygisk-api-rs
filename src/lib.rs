@@ -5,12 +5,12 @@ use core::ptr::NonNull;
 use api::ZygiskApi;
 use jni::JNIEnv;
 use raw::{RawApiTable, RawModuleAbi, ZygiskRaw};
+use static_alloc::Bump;
+use without_alloc::{alloc::LocalAllocLeakExt, Box};
 
 pub mod api;
 mod aux;
 pub use aux::*;
-use static_alloc::Bump;
-use without_alloc::{alloc::LocalAllocLeakExt, Box};
 pub mod error;
 pub mod raw;
 
@@ -18,41 +18,40 @@ pub(crate) mod impl_sealing {
     pub trait Sealed {}
 }
 
-pub trait ZygiskModule<Version>
-where
-    for<'a> Version: ZygiskRaw<'a>,
-{
-    fn on_load(&self, _: ZygiskApi<'_, Version>, _: JNIEnv<'_>) {}
+pub trait ZygiskModule {
+    type Api: for<'a> ZygiskRaw<'a>;
+
+    fn on_load(&self, _: ZygiskApi<'_, Self::Api>, _: JNIEnv<'_>) {}
 
     fn pre_app_specialize<'a>(
         &self,
-        _: ZygiskApi<'a, Version>,
+        _: ZygiskApi<'a, Self::Api>,
         _: JNIEnv<'a>,
-        _: &'a mut <Version as ZygiskRaw<'_>>::AppSpecializeArgs,
+        _: &'a mut <Self::Api as ZygiskRaw<'_>>::AppSpecializeArgs,
     ) {
     }
 
     fn post_app_specialize<'a>(
         &self,
-        _: ZygiskApi<'a, Version>,
+        _: ZygiskApi<'a, Self::Api>,
         _: JNIEnv<'a>,
-        _: &'a <Version as ZygiskRaw<'_>>::AppSpecializeArgs,
+        _: &'a <Self::Api as ZygiskRaw<'_>>::AppSpecializeArgs,
     ) {
     }
 
     fn pre_server_specialize<'a>(
         &self,
-        _: ZygiskApi<'a, Version>,
+        _: ZygiskApi<'a, Self::Api>,
         _: JNIEnv<'a>,
-        _: &'a mut <Version as ZygiskRaw<'_>>::ServerSpecializeArgs,
+        _: &'a mut <Self::Api as ZygiskRaw<'_>>::ServerSpecializeArgs,
     ) {
     }
 
     fn post_server_specialize<'a>(
         &self,
-        _: ZygiskApi<'a, Version>,
+        _: ZygiskApi<'a, Self::Api>,
         _: JNIEnv<'a>,
-        _: &'a <Version as ZygiskRaw<'_>>::ServerSpecializeArgs,
+        _: &'a <Self::Api as ZygiskRaw<'_>>::ServerSpecializeArgs,
     ) {
     }
 }
@@ -64,13 +63,10 @@ pub fn module_entry<'a, Version, ModuleImpl>(
     jni_env: JNIEnv<'a>,
 ) where
     for<'b> Version: ZygiskRaw<'b>,
-    ModuleImpl: ZygiskModule<Version>,
+    ModuleImpl: ZygiskModule<Api = Version>,
 {
-    // Raw module vtable and ABI has a fixed size, which was done by design to retain compatibility across interface versions
-    // That's why we can pin the ABI and module vtable on version 1, and use it for all versions
-
-    static RAW_MODULE_SLAB: Bump<[raw::RawModule<'static, api::V1>; 2]> = const { Bump::uninit() };
-
+    // RawModule<Version> size and alignment are consistent across all versions, hence we can just use a slab for the first version
+    static RAW_MODULE_SLAB: Bump<[raw::RawModule<api::V1>; 1]> = const { Bump::uninit() };
     let raw_module = Box::leak(
         RAW_MODULE_SLAB
             .boxed(raw::RawModule::<'a> {
@@ -81,18 +77,18 @@ pub fn module_entry<'a, Version, ModuleImpl>(
             .unwrap(),
     );
 
-    static ABI_SLAB: Bump<[raw::ModuleAbi<'static, api::V1>; 2]> = const { Bump::uninit() };
+    // RawModuleAbi<Version> size and alignment are *also* consistent across all versions, hence we can just use a slab for the first version
+    static RAW_MODULE_ABI_SLAB: Bump<[raw::ModuleAbi<api::V1>; 1]> = const { Bump::uninit() };
     let abi = RawModuleAbi::from_non_null(unsafe {
         NonNull::new_unchecked(Box::leak(
-            ABI_SLAB
+            RAW_MODULE_ABI_SLAB
                 .boxed(Version::abi_from_module(raw_module))
                 .unwrap(),
         ))
     });
 
     if unsafe { Version::register_module_fn(api_table.0.as_ref())(api_table.0, abi) } {
-        let api = ZygiskApi::<Version>(api_table);
-        dispatch.on_load(api, jni_env);
+        dispatch.on_load(ZygiskApi::<Version>(api_table), jni_env);
     }
 }
 
@@ -101,16 +97,16 @@ macro_rules! register_module {
     ($module:expr) => {
         #[doc(hidden)]
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn zygisk_module_entry<'a>(
-            api_table: ::std::ptr::NonNull<::std::marker::PhantomData<&'a ()>>,
+        pub unsafe extern "C" fn zygisk_module_entry(
+            api_table: ::core::ptr::NonNull<::core::marker::PhantomData<&()>>,
             jni_env: $crate::jni::JNIEnv,
         ) {
             if ::std::panic::catch_unwind(|| {
                 $crate::module_entry(
                     $module,
-                    $crate::raw::RawApiTable::from_non_null(::std::ptr::NonNull::new_unchecked(
-                        api_table.as_ptr().cast(),
-                    )),
+                    $crate::raw::RawApiTable::from_non_null(unsafe {
+                        ::core::ptr::NonNull::new_unchecked(api_table.as_ptr().cast())
+                    }),
                     jni_env,
                 );
             })
@@ -129,13 +125,9 @@ macro_rules! register_companion {
         #[unsafe(no_mangle)]
         pub extern "C" fn zygisk_companion_entry(socket_fd: ::std::os::fd::OwnedFd) {
             if ::std::panic::catch_unwind(|| {
-                // SAFETY: it is guaranteed by zygiskd that the argument is a valid
-                // socket fd.
-                let mut stream = unsafe {
-                    <::std::os::unix::net::UnixStream as ::std::convert::From<
-                        ::std::os::fd::OwnedFd,
-                    >>::from(socket_fd)
-                };
+                let mut stream = <::std::os::unix::net::UnixStream as ::core::convert::From<
+                    ::std::os::fd::OwnedFd,
+                >>::from(socket_fd);
 
                 let func: for<'a> fn(&'a mut ::std::os::unix::net::UnixStream) = $func;
                 func(&mut stream)

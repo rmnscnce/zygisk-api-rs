@@ -1,6 +1,4 @@
-use core::
-    ptr::{self, NonNull}
-;
+use core::ptr::{self, NonNull};
 use std::os::{fd::FromRawFd, unix::net::UnixStream};
 
 use jni::{strings::JNIStr, sys::JNINativeMethod, JNIEnv};
@@ -38,8 +36,7 @@ impl super::ZygiskApi<'_, V1> {
         match unsafe { (api_dispatch.connect_companion_fn)(api_dispatch.base.this) } {
             -1 => Err(ZygiskError::ConnectCompanionError),
             fd => {
-                static UNIXSTREAM_SLAB: Bump<[UnixStream; 2]> =
-                    const { Bump::uninit() };
+                static UNIXSTREAM_SLAB: Bump<[UnixStream; 1]> = const { Bump::uninit() };
                 let unix_stream = UNIXSTREAM_SLAB
                     .boxed(unsafe { UnixStream::from_raw_fd(fd) })
                     .unwrap();
@@ -115,15 +112,17 @@ impl super::ZygiskApi<'_, V1> {
 
         let mut old_func = NonNull::dangling();
 
-        unsafe { (self.dispatch().plt_hook_register_fn)(
-            regex.as_ptr().cast(),
-            match symbol.is_empty() {
-                true => ptr::null(),
-                false => symbol.as_ptr().cast(),
-            },
-            new_func,
-            Some(NonNull::new_unchecked(&mut old_func as *mut _)),
-        ) };
+        unsafe {
+            (self.dispatch().plt_hook_register_fn)(
+                regex.as_ptr().cast(),
+                match symbol.is_empty() {
+                    true => ptr::null(),
+                    false => symbol.as_ptr().cast(),
+                },
+                new_func,
+                Some(NonNull::new_unchecked(&mut old_func as *mut _)),
+            )
+        };
 
         old_func
     }

@@ -26,7 +26,7 @@ impl super::ZygiskApi<'_, V3> {
         match unsafe { (api_dispatch.connect_companion_fn)(api_dispatch.base.this) } {
             -1 => Err(ZygiskError::ConnectCompanionError),
             fd => {
-                static UNIXSTREAM_SLAB: Bump<[UnixStream; 2]> =
+                static UNIXSTREAM_SLAB: Bump<[UnixStream; 1]> =
                     const { Bump::uninit() };
                 let unix_stream = UNIXSTREAM_SLAB
                     .boxed(unsafe { UnixStream::from_raw_fd(fd) })

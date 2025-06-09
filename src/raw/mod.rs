@@ -15,7 +15,7 @@ pub struct RawModule<'a, Version>
 where
     Version: ZygiskRaw<'a> + 'a,
 {
-    pub(crate) dispatch: &'a dyn ZygiskModule<Version>,
+    pub(crate) dispatch: &'a dyn ZygiskModule<Api = Version>,
     pub(crate) api_table: RawApiTable<'a, Version>,
     pub(crate) jni_env: JNIEnv<'a>,
 }
@@ -66,7 +66,7 @@ where
     ),
 }
 
-/// Opaque type representing the API instance
+/// Opaque type representing the API instance handle pointer
 #[repr(transparent)]
 pub(crate) struct Instance(());
 
@@ -101,7 +101,7 @@ where
 
 pub trait ZygiskRaw<'a>
 where
-    Self: Sealed + Copy + Sized,
+    Self: Sealed + Copy + Sized + 'a,
 {
     const API_VERSION: c_long;
     type ApiTable: 'a;

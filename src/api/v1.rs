@@ -31,7 +31,7 @@ impl super::ZygiskApi<'_, V1> {
     ///
     /// Returns a [UnixStream] that is connected to the socket passed to your module's companion
     /// request handler. Returns `Err` if the connection attempt failed.
-    pub fn with_companion<F, R>(
+    pub fn with_companion<R>(
         &mut self,
         f: impl FnOnce(&mut UnixStream) -> R,
     ) -> Result<R, ZygiskError> {

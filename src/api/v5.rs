@@ -23,7 +23,7 @@ pub struct V5;
 impl Sealed for V5 {}
 
 impl super::ZygiskApi<'_, V5> {
-    pub fn with_companion<F, R>(
+    pub fn with_companion<R>(
         &mut self,
         f: impl FnOnce(&mut UnixStream) -> R,
     ) -> Result<R, ZygiskError> {

@@ -24,7 +24,7 @@ where
 #[repr(transparent)]
 pub struct RawApiTable<'a, Version>(
     // Note: This is a pointer to const
-    pub(crate) NonNull<<Version as ZygiskRaw<'a>>::ApiTable>,
+    #[doc(hidden)] pub NonNull<<Version as ZygiskRaw<'a>>::ApiTable>,
     PhantomData<&'a Version>,
 )
 where

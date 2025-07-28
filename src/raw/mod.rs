@@ -11,15 +11,20 @@ pub mod v3;
 pub mod v4;
 pub mod v5;
 
+#[doc(hidden)]
 pub struct RawModule<'a, Version>
 where
     Version: ZygiskRaw<'a> + 'a,
 {
-    pub(crate) dispatch: &'a (dyn ZygiskModule<Api = Version> + 'a),
-    pub(crate) api_table: RawApiTable<'a, Version>,
-    pub(crate) jni_env: JNIEnv<'a>,
+    #[doc(hidden)]
+    pub dispatch: &'a (dyn ZygiskModule<Api = Version> + 'a),
+    #[doc(hidden)]
+    pub api_table: RawApiTable<'a, Version>,
+    #[doc(hidden)]
+    pub jni_env: JNIEnv<'a>,
 }
 
+#[doc(hidden)]
 #[derive(Clone, Copy)]
 #[repr(transparent)]
 pub struct RawApiTable<'a, Version>(

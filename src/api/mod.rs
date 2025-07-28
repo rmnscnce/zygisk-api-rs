@@ -16,7 +16,7 @@ pub mod v5;
 pub use v5::V5;
 
 #[repr(transparent)]
-pub struct ZygiskApi<'a, Version>(pub(crate) RawApiTable<'a, Version>)
+pub struct ZygiskApi<'a, Version>(#[doc(hidden)] pub RawApiTable<'a, Version>)
 where
     Version: ZygiskRaw<'a> + 'a;
 
@@ -24,7 +24,8 @@ impl<'a, Version> ZygiskApi<'a, Version>
 where
     Version: ZygiskRaw<'a> + 'a,
 {
-    pub(crate) unsafe fn dispatch(&self) -> &<Version as ZygiskRaw<'a>>::ApiTable {
-        unsafe { &*self.0 .0.as_ptr() }
+    #[doc(hidden)]
+    pub unsafe fn dispatch(&self) -> &<Version as ZygiskRaw<'a>>::ApiTable {
+        unsafe { &*self.0.0.as_ptr() }
     }
 }

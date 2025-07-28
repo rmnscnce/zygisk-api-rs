@@ -73,32 +73,35 @@ macro_rules! register_module {
             api_table: ::core::ptr::NonNull<::core::marker::PhantomData<&()>>,
             jni_env: $crate::jni::JNIEnv,
         ) {
-            let api_table = $crate::raw::RawApiTable::from_non_null(unsafe {
-                ::core::ptr::NonNull::new_unchecked(api_table.as_ptr().cast())
-            });
-            let dispatch = $module;
+            if ::std::panic::catch_unwind(move || {
+                let api_table = $crate::raw::RawApiTable::from_non_null(unsafe {
+                    ::core::ptr::NonNull::new_unchecked(api_table.as_ptr().cast())
+                });
+                let dispatch = $module;
 
-            let mut raw_module = $crate::raw::RawModule {
-                dispatch: $module,
-                api_table,
-                jni_env: unsafe { jni_env.unsafe_clone() },
-            };
+                let mut raw_module = $crate::raw::RawModule {
+                    dispatch: $module,
+                    api_table,
+                    jni_env: unsafe { jni_env.unsafe_clone() },
+                };
 
-            let mut abi = $crate::raw::ZygiskRaw::abi_from_module(&mut raw_module);
-            let abi = $crate::raw::RawModuleAbi::from_non_null(unsafe {
-                ::core::ptr::NonNull::new_unchecked(&raw mut abi)
-            });
+                let mut abi = $crate::raw::ZygiskRaw::abi_from_module(&mut raw_module);
+                let abi = $crate::raw::RawModuleAbi::from_non_null(unsafe {
+                    ::core::ptr::NonNull::new_unchecked(&raw mut abi)
+                });
 
-            if unsafe {
-                $crate::raw::ZygiskRaw::register_module_fn(api_table.0.as_ref())(api_table.0, abi)
-            } {
-                if ::std::panic::catch_unwind(|| {
+                if unsafe {
+                    $crate::raw::ZygiskRaw::register_module_fn(api_table.0.as_ref())(
+                        api_table.0,
+                        abi,
+                    )
+                } {
                     dispatch.on_load($crate::api::ZygiskApi(api_table), jni_env);
-                })
-                .is_err()
-                {
-                    ::std::process::abort();
                 }
+            })
+            .is_err()
+            {
+                ::std::process::abort();
             }
         }
     };
@@ -110,7 +113,7 @@ macro_rules! register_companion {
         #[doc(hidden)]
         #[unsafe(no_mangle)]
         pub extern "C" fn zygisk_companion_entry(socket_fd: ::std::os::fd::OwnedFd) {
-            if ::std::panic::catch_unwind(|| {
+            if ::std::panic::catch_unwind(move || {
                 let mut stream = <::std::os::unix::net::UnixStream as ::core::convert::From<
                     ::std::os::fd::OwnedFd,
                 >>::from(socket_fd);

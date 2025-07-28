@@ -1,12 +1,8 @@
 #![warn(clippy::std_instead_of_core)]
 
-use core::ptr::NonNull;
-
 use api::ZygiskApi;
 use jni::JNIEnv;
-use raw::{RawApiTable, RawModuleAbi, ZygiskRaw};
-use static_alloc::Bump;
-use without_alloc::{alloc::LocalAllocLeakExt, Box};
+use raw::ZygiskRaw;
 
 pub mod api;
 mod aux;
@@ -16,6 +12,18 @@ pub mod raw;
 
 pub(crate) mod impl_sealing {
     pub trait Sealed {}
+}
+
+pub(crate) mod utils {
+    use core::mem;
+
+    pub struct ShapeAssertion<T, U>(T, U);
+    impl<T, U> ShapeAssertion<T, U> {
+        pub const ASSERT: () = const {
+            assert!(mem::size_of::<T>() == mem::size_of::<U>());
+            assert!(mem::align_of::<T>() == mem::align_of::<U>());
+        };
+    }
 }
 
 pub trait ZygiskModule {
@@ -56,42 +64,6 @@ pub trait ZygiskModule {
     }
 }
 
-#[doc(hidden)]
-pub fn module_entry<'a, Version, ModuleImpl>(
-    dispatch: &'a ModuleImpl,
-    api_table: RawApiTable<'a, Version>,
-    jni_env: JNIEnv<'a>,
-) where
-    for<'b> Version: ZygiskRaw<'b>,
-    ModuleImpl: ZygiskModule<Api = Version>,
-{
-    // RawModule<Version> size and alignment are consistent across all versions, hence we can just use a slab for the first version
-    static RAW_MODULE_SLAB: Bump<[raw::RawModule<api::V1>; 1]> = const { Bump::uninit() };
-    let raw_module = Box::leak(
-        RAW_MODULE_SLAB
-            .boxed(raw::RawModule::<'a> {
-                dispatch,
-                api_table,
-                jni_env: unsafe { jni_env.unsafe_clone() },
-            })
-            .unwrap(),
-    );
-
-    // RawModuleAbi<Version> size and alignment are *also* consistent across all versions, hence we can just use a slab for the first version
-    static RAW_MODULE_ABI_SLAB: Bump<[raw::ModuleAbi<api::V1>; 1]> = const { Bump::uninit() };
-    let abi = RawModuleAbi::from_non_null(unsafe {
-        NonNull::new_unchecked(Box::leak(
-            RAW_MODULE_ABI_SLAB
-                .boxed(Version::abi_from_module(raw_module))
-                .unwrap(),
-        ))
-    });
-
-    if unsafe { Version::register_module_fn(api_table.0.as_ref())(api_table.0, abi) } {
-        dispatch.on_load(ZygiskApi::<Version>(api_table), jni_env);
-    }
-}
-
 #[macro_export]
 macro_rules! register_module {
     ($module:expr) => {
@@ -101,18 +73,32 @@ macro_rules! register_module {
             api_table: ::core::ptr::NonNull<::core::marker::PhantomData<&()>>,
             jni_env: $crate::jni::JNIEnv,
         ) {
-            if ::std::panic::catch_unwind(|| {
-                $crate::module_entry(
-                    $module,
-                    $crate::raw::RawApiTable::from_non_null(unsafe {
-                        ::core::ptr::NonNull::new_unchecked(api_table.as_ptr().cast())
-                    }),
-                    jni_env,
-                );
-            })
-            .is_err()
-            {
-                ::std::process::abort();
+            let api_table = $crate::raw::RawApiTable::from_non_null(unsafe {
+                ::core::ptr::NonNull::new_unchecked(api_table.as_ptr().cast())
+            });
+            let dispatch = $module;
+
+            let mut raw_module = $crate::raw::RawModule {
+                dispatch: $module,
+                api_table,
+                jni_env: unsafe { jni_env.unsafe_clone() },
+            };
+
+            let mut abi = $crate::raw::ZygiskRaw::abi_from_module(&mut raw_module);
+            let abi = $crate::raw::RawModuleAbi::from_non_null(unsafe {
+                ::core::ptr::NonNull::new_unchecked(&raw mut abi)
+            });
+
+            if unsafe {
+                $crate::raw::ZygiskRaw::register_module_fn(api_table.0.as_ref())(api_table.0, abi)
+            } {
+                if ::std::panic::catch_unwind(|| {
+                    dispatch.on_load($crate::api::ZygiskApi(api_table), jni_env);
+                })
+                .is_err()
+                {
+                    ::std::process::abort();
+                }
             }
         }
     };
@@ -134,12 +120,23 @@ macro_rules! register_companion {
             })
             .is_err()
             {
-                // Panic messages should be displayed by the default panic hook.
                 ::std::process::abort();
             }
-
-            // It is both OK for us to close the fd or not to, since zygiskd
-            // makes use of some nasty `fstat` tricks to handle both situations.
         }
     };
+}
+
+#[cfg(test)]
+mod compile_test {
+    use crate::{ZygiskModule, api};
+
+    struct MyModule;
+
+    impl ZygiskModule for MyModule {
+        type Api = api::V5;
+    }
+
+    register_module!(&MyModule);
+
+    register_companion!(|_| ());
 }

@@ -3,7 +3,7 @@ use core::{marker::PhantomData, ptr::NonNull};
 use jni::JNIEnv;
 use libc::c_long;
 
-use crate::{impl_sealing::Sealed, ZygiskModule};
+use crate::{ZygiskModule, impl_sealing::Sealed};
 
 pub mod v1;
 pub mod v2;
@@ -15,7 +15,7 @@ pub struct RawModule<'a, Version>
 where
     Version: ZygiskRaw<'a> + 'a,
 {
-    pub(crate) dispatch: &'a dyn ZygiskModule<Api = Version>,
+    pub(crate) dispatch: &'a (dyn ZygiskModule<Api = Version> + 'a),
     pub(crate) api_table: RawApiTable<'a, Version>,
     pub(crate) jni_env: JNIEnv<'a>,
 }
@@ -94,7 +94,8 @@ impl<'a, Version> RawModuleAbi<'a, Version>
 where
     Version: ZygiskRaw<'a>,
 {
-    pub(crate) fn from_non_null(non_null: NonNull<ModuleAbi<'a, Version>>) -> Self {
+    #[doc(hidden)]
+    pub fn from_non_null(non_null: NonNull<ModuleAbi<'a, Version>>) -> Self {
         Self(non_null, PhantomData)
     }
 }

@@ -1,9 +1,9 @@
 use core::ptr::NonNull;
 
-use jni::{sys::JNINativeMethod, JNIEnv};
+use jni::{JNIEnv, sys::JNINativeMethod};
 use libc::{c_char, c_int, c_long};
 
-use crate::api::{ZygiskApi, V1};
+use crate::api::{V1, ZygiskApi};
 
 use super::{BaseApi, Instance, ModuleAbi, RawModule, RawModuleAbi, ZygiskRaw};
 pub(crate) mod transparent {
@@ -58,12 +58,8 @@ pub struct ApiTable {
 
     pub(crate) hook_jni_native_methods_fn:
         for<'a> extern "C" fn(JNIEnv<'a>, *const c_char, NonNull<JNINativeMethod>, c_int),
-    pub(crate) plt_hook_register_fn: unsafe extern "C" fn(
-        *const c_char,
-        *const c_char,
-        NonNull<()>,
-        Option<NonNull<NonNull<()>>>,
-    ),
+    pub(crate) plt_hook_register_fn:
+        unsafe extern "C" fn(*const c_char, *const c_char, *const (), Option<NonNull<*const ()>>),
     pub(crate) plt_hook_exclude_fn: unsafe extern "C" fn(*const c_char, *const c_char),
     pub(crate) plt_hook_commit_fn: extern "C" fn() -> bool,
     pub(crate) connect_companion_fn: unsafe extern "C" fn(NonNull<Instance>) -> c_int,

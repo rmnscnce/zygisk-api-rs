@@ -69,19 +69,21 @@ macro_rules! register_module {
     ($module:expr) => {
         #[doc(hidden)]
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn zygisk_module_entry<'a>(
-            api_table: ::core::ptr::NonNull<::core::marker::PhantomData<&'a ()>>,
-            env: $crate::jni::JNIEnv<'a>,
+        pub unsafe extern "C" fn zygisk_module_entry(
+            api_table: ::core::ptr::NonNull<::core::marker::PhantomData<&'static ()>>,
+            env: $crate::jni::JNIEnv<'static>,
         ) {
             if ::std::panic::catch_unwind(move || {
                 let api_table = $crate::raw::RawApiTable::from_non_null(unsafe {
                     ::core::ptr::NonNull::new_unchecked(api_table.as_ptr().cast())
                 });
 
-                let dispatch: &'static (dyn $crate::ZygiskModule<Api = _> + 'static) = $module;
+                let dispatch = ::core::mem::ManuallyDrop::new($module);
+                let dispatch: &dyn $crate::ZygiskModule<Api = _> =
+                    ::core::ops::Deref::deref(&dispatch);
 
                 let mut raw_module = ::core::mem::ManuallyDrop::new($crate::raw::RawModule {
-                    dispatch: $module,
+                    dispatch,
                     api_table,
                     jni_env: unsafe { env.unsafe_clone() },
                 });
@@ -142,10 +144,7 @@ mod compile_test {
     impl ZygiskModule for MyModule {
         type Api = api::V5;
     }
-
-    static M: MyModule = const { MyModule };
-
-    register_module!(&M);
+    register_module!(MyModule);
 
     register_companion!(|_| ());
 }

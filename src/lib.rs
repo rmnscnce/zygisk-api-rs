@@ -69,25 +69,29 @@ macro_rules! register_module {
     ($module:expr) => {
         #[doc(hidden)]
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn zygisk_module_entry(
-            api_table: ::core::ptr::NonNull<::core::marker::PhantomData<&()>>,
-            jni_env: $crate::jni::JNIEnv,
+        pub unsafe extern "C" fn zygisk_module_entry<'a>(
+            api_table: ::core::ptr::NonNull<::core::marker::PhantomData<&'a ()>>,
+            env: $crate::jni::JNIEnv<'a>,
         ) {
             if ::std::panic::catch_unwind(move || {
                 let api_table = $crate::raw::RawApiTable::from_non_null(unsafe {
                     ::core::ptr::NonNull::new_unchecked(api_table.as_ptr().cast())
                 });
-                let dispatch = $module;
 
-                let mut raw_module = $crate::raw::RawModule {
+                let dispatch: &'static (dyn $crate::ZygiskModule<Api = _> + 'static) = $module;
+
+                let mut raw_module = ::core::mem::ManuallyDrop::new($crate::raw::RawModule {
                     dispatch: $module,
                     api_table,
-                    jni_env: unsafe { jni_env.unsafe_clone() },
-                };
+                    jni_env: unsafe { env.unsafe_clone() },
+                });
 
-                let mut abi = $crate::raw::ZygiskRaw::abi_from_module(&mut raw_module);
+                let mut abi =
+                    ::core::mem::ManuallyDrop::new($crate::raw::ZygiskRaw::abi_from_module(
+                        ::core::ops::DerefMut::deref_mut(&mut raw_module),
+                    ));
                 let abi = $crate::raw::RawModuleAbi::from_non_null(unsafe {
-                    ::core::ptr::NonNull::new_unchecked(&raw mut abi)
+                    ::core::ptr::NonNull::new_unchecked(::core::ops::DerefMut::deref_mut(&mut abi))
                 });
 
                 if unsafe {
@@ -96,7 +100,7 @@ macro_rules! register_module {
                         abi,
                     )
                 } {
-                    dispatch.on_load($crate::api::ZygiskApi(api_table), jni_env);
+                    dispatch.on_load($crate::api::ZygiskApi(api_table), env);
                 }
             })
             .is_err()
@@ -139,7 +143,9 @@ mod compile_test {
         type Api = api::V5;
     }
 
-    register_module!(&MyModule);
+    static M: MyModule = const { MyModule };
+
+    register_module!(&M);
 
     register_companion!(|_| ());
 }

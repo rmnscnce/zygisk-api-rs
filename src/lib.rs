@@ -78,7 +78,7 @@ macro_rules! register_module {
                     ::core::ptr::NonNull::new_unchecked(api_table.as_ptr().cast())
                 });
 
-                let dispatch = ::core::mem::ManuallyDrop::new($module);
+                let dispatch = const { ::core::mem::ManuallyDrop::new($module) };
                 let dispatch: &dyn $crate::ZygiskModule<Api = _> =
                     ::core::ops::Deref::deref(&dispatch);
 

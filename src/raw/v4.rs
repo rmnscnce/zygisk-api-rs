@@ -5,7 +5,7 @@ use libc::{c_char, c_int, c_long, dev_t, ino_t};
 
 use crate::api::{V4, ZygiskApi};
 
-use super::{BaseApi, Instance, ModuleAbi, RawModuleAbi, ZygiskRaw};
+use super::{ApiTableRef, BaseApi, Instance, ModuleAbi, ModuleAbiRef, ZygiskRaw};
 
 pub(crate) mod transparent {
     pub use crate::raw::v1::transparent::{ServerSpecializeArgs, ZygiskOption};
@@ -91,11 +91,8 @@ impl<'a> ZygiskRaw<'a> for V4 {
     }
 
     fn register_module_fn(
-        table: &'a <Self as ZygiskRaw<'a>>::ApiTable,
-    ) -> for<'b> unsafe extern "C" fn(
-        NonNull<<Self as ZygiskRaw<'a>>::ApiTable>,
-        RawModuleAbi<'b, Self>,
-    ) -> bool {
-        table.base.register_module_fn
+        table: ApiTableRef<Self>,
+    ) -> unsafe extern "C" fn(ApiTableRef<Self>, ModuleAbiRef<'_, Self>) -> bool {
+        unsafe { &*table.0 }.base.register_module_fn
     }
 }

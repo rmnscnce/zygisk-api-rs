@@ -10,20 +10,10 @@ pub use aux::*;
 pub mod error;
 pub mod raw;
 
+#[doc(hidden)]
+pub mod utils;
 pub(crate) mod impl_sealing {
     pub trait Sealed {}
-}
-
-pub(crate) mod utils {
-    use core::mem;
-
-    pub struct ShapeAssertion<T, U>(T, U);
-    impl<T, U> ShapeAssertion<T, U> {
-        pub const ASSERT: () = const {
-            assert!(mem::size_of::<T>() == mem::size_of::<U>());
-            assert!(mem::align_of::<T>() == mem::align_of::<U>());
-        };
-    }
 }
 
 pub trait ZygiskModule {
@@ -66,43 +56,67 @@ pub trait ZygiskModule {
 
 #[macro_export]
 macro_rules! register_module {
-    ($module:expr) => {
+    ($module:ty) => {
         #[doc(hidden)]
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn zygisk_module_entry(
-            api_table: ::core::ptr::NonNull<::core::marker::PhantomData<&'static ()>>,
-            env: $crate::jni::JNIEnv<'static>,
+            api_table: *const (),
+            env: *mut $crate::jni::sys::JNIEnv,
         ) {
             if ::std::panic::catch_unwind(move || {
-                let api_table = $crate::raw::RawApiTable::from_non_null(unsafe {
-                    ::core::ptr::NonNull::new_unchecked(api_table.as_ptr().cast())
-                });
+                type Api = <$module as $crate::ZygiskModule>::Api;
+                type RawModule<'a> = $crate::raw::RawModule<'a, Api>;
+                type ModuleAbi<'a> = $crate::raw::ModuleAbi<'a, Api>;
 
-                let dispatch = const { ::core::mem::ManuallyDrop::new($module) };
-                let dispatch: &dyn $crate::ZygiskModule<Api = _> =
-                    ::core::ops::Deref::deref(&dispatch);
+                struct Place<'a> {
+                    module: $crate::utils::Local<$module>,
+                    raw_module: $crate::utils::Local<RawModule<'a>>,
+                    module_abi: $crate::utils::Local<ModuleAbi<'a>>,
+                }
 
-                let mut raw_module = ::core::mem::ManuallyDrop::new($crate::raw::RawModule {
-                    dispatch,
-                    api_table,
-                    jni_env: unsafe { env.unsafe_clone() },
-                });
+                impl Place<'_> {
+                    const fn new() -> Self {
+                        Self {
+                            module: $crate::utils::Local::uninit(),
+                            raw_module: $crate::utils::Local::uninit(),
+                            module_abi: $crate::utils::Local::uninit(),
+                        }
+                    }
+                }
 
-                let mut abi =
-                    ::core::mem::ManuallyDrop::new($crate::raw::ZygiskRaw::abi_from_module(
-                        ::core::ops::DerefMut::deref_mut(&mut raw_module),
-                    ));
-                let abi = $crate::raw::RawModuleAbi::from_non_null(unsafe {
-                    ::core::ptr::NonNull::new_unchecked(::core::ops::DerefMut::deref_mut(&mut abi))
-                });
+                static PLACE: Place = const { Place::new() };
+
+                let Place {
+                    module,
+                    raw_module,
+                    module_abi,
+                } = &PLACE;
+
+                let module = $crate::utils::LocalBox::leak(
+                    module.boxed(::core::default::Default::default()),
+                );
+                let api_table =
+                    unsafe { $crate::raw::ApiTableRef::from_raw(api_table as *const _) };
+                let raw_module =
+                    $crate::utils::LocalBox::leak(raw_module.boxed($crate::raw::RawModule {
+                        dispatch: module,
+                        api_table: ::core::clone::Clone::clone(&api_table),
+                        jni_env: unsafe { $crate::jni::JNIEnv::from_raw(env).unwrap_unchecked() },
+                    }));
+                let module_abi =
+                    module_abi.boxed(<Api as $crate::raw::ZygiskRaw>::abi_from_module(raw_module));
+                let abi = unsafe {
+                    $crate::raw::ModuleAbiRef::from_raw($crate::utils::LocalBox::into_raw(
+                        module_abi,
+                    ))
+                };
 
                 if unsafe {
-                    $crate::raw::ZygiskRaw::register_module_fn(api_table.0.as_ref())(
-                        api_table.0,
-                        abi,
-                    )
+                    <Api as $crate::raw::ZygiskRaw>::register_module_fn(api_table)(api_table, abi)
                 } {
-                    dispatch.on_load($crate::api::ZygiskApi(api_table), env);
+                    module.on_load($crate::api::ZygiskApi(api_table), unsafe {
+                        $crate::jni::JNIEnv::from_raw(env).unwrap_unchecked()
+                    })
                 }
             })
             .is_err()
@@ -118,11 +132,11 @@ macro_rules! register_companion {
     ($func: expr) => {
         #[doc(hidden)]
         #[unsafe(no_mangle)]
-        pub extern "C" fn zygisk_companion_entry(socket_fd: ::std::os::fd::OwnedFd) {
+        pub extern "C" fn zygisk_companion_entry(sock_fd: ::std::os::fd::OwnedFd) {
             if ::std::panic::catch_unwind(move || {
                 let mut stream = <::std::os::unix::net::UnixStream as ::core::convert::From<
                     ::std::os::fd::OwnedFd,
-                >>::from(socket_fd);
+                >>::from(sock_fd);
 
                 let func: for<'a> fn(&'a mut ::std::os::unix::net::UnixStream) = $func;
                 func(&mut stream)
@@ -139,6 +153,7 @@ macro_rules! register_companion {
 mod compile_test {
     use crate::{ZygiskModule, api};
 
+    #[derive(Default)]
     struct MyModule;
 
     impl ZygiskModule for MyModule {

@@ -1,4 +1,4 @@
-use crate::raw::{RawApiTable, ZygiskRaw};
+use crate::raw::{ApiTableRef, ZygiskRaw};
 
 pub mod v1;
 pub use v1::V1;
@@ -16,7 +16,7 @@ pub mod v5;
 pub use v5::V5;
 
 #[repr(transparent)]
-pub struct ZygiskApi<'a, Version>(#[doc(hidden)] pub RawApiTable<'a, Version>)
+pub struct ZygiskApi<'a, Version>(#[doc(hidden)] pub ApiTableRef<'a, Version>)
 where
     Version: ZygiskRaw<'a> + 'a;
 
@@ -26,6 +26,6 @@ where
 {
     #[doc(hidden)]
     pub unsafe fn dispatch(&self) -> &<Version as ZygiskRaw<'a>>::ApiTable {
-        unsafe { &*self.0.0.as_ptr() }
+        unsafe { &*self.0.0 }
     }
 }

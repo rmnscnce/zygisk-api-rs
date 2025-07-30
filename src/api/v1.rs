@@ -1,6 +1,4 @@
-use core::ops::Deref;
-use core::ptr::{self, NonNull};
-use std::ffi;
+use core::{ffi, ops::Deref, ptr::NonNull};
 use std::os::{fd::FromRawFd, unix::net::UnixStream};
 
 use jni::{JNIEnv, strings::JNIStr, sys::JNINativeMethod};
@@ -107,68 +105,43 @@ impl super::ZygiskApi<'_, V1> {
         regex: S,
         symbol: S,
         new_func: NonNull<FnPtr>,
-    ) -> Result<NonNull<FnPtr>, ZygiskError>
+    ) -> NonNull<FnPtr>
     where
-        S: AsRef<str>,
+        S: AsRef<ffi::CStr>,
     {
         let regex = regex.as_ref();
         let symbol = symbol.as_ref();
         // constexpr assertion <FnPtr>
         let _: () = utils::ShapeAssertion::<FnPtr, extern "C" fn()>::ASSERT;
 
-        let regex = match ffi::CString::new(regex) {
-            Ok(regex) => regex,
-            Err(e) => return Err(ZygiskError::IncompatibleWithCStr(e)),
-        };
-        let symbol = match symbol.is_empty() {
-            true => ptr::null(),
-            false => match ffi::CString::new(symbol) {
-                Ok(symbol) => symbol.as_bytes_with_nul().as_ptr().cast(),
-                Err(e) => return Err(ZygiskError::IncompatibleWithCStr(e)),
-            },
-        };
-
         let old_func = NonNull::dangling();
 
         unsafe {
             (self.dispatch().plt_hook_register_fn)(
-                regex.as_bytes_with_nul().as_ptr().cast(),
-                symbol,
+                regex.to_bytes_with_nul().as_ptr().cast(),
+                symbol.to_bytes_with_nul().as_ptr().cast(),
                 new_func.as_ptr().cast(),
                 Some(NonNull::new_unchecked(old_func.as_ptr() as *mut _)),
             )
         };
 
-        Ok(old_func)
+        old_func
     }
 
     /// For ELFs loaded in memory matching `regex`, exclude hooks registered for `symbol`.
     /// If symbol is empty, then all symbols will be excluded.
-    pub fn plt_hook_exclude<S>(&mut self, regex: S, symbol: S) -> Result<(), ZygiskError>
+    pub fn plt_hook_exclude<S>(&mut self, regex: S, symbol: S)
     where
-        S: AsRef<str>,
+        S: AsRef<ffi::CStr>,
     {
         let regex = regex.as_ref();
         let symbol = symbol.as_ref();
 
-        let regex = match ffi::CString::new(regex) {
-            Ok(regex) => regex,
-            Err(e) => return Err(ZygiskError::IncompatibleWithCStr(e)),
-        };
-        let symbol = match symbol.is_empty() {
-            true => ptr::null(),
-            false => match ffi::CString::new(symbol) {
-                Ok(symbol) => symbol.as_bytes_with_nul().as_ptr().cast(),
-                Err(e) => return Err(ZygiskError::IncompatibleWithCStr(e)),
-            },
-        };
-
         unsafe {
             (self.dispatch().plt_hook_exclude_fn)(
                 regex.to_bytes_with_nul().as_ptr().cast(),
-                symbol,
-            );
-            Ok(())
+                symbol.to_bytes_with_nul().as_ptr().cast(),
+            )
         }
     }
 
@@ -178,7 +151,7 @@ impl super::ZygiskApi<'_, V1> {
     pub fn plt_hook_commit(&mut self) -> Result<(), ZygiskError> {
         match unsafe { (self.dispatch().plt_hook_commit_fn)() } {
             true => Ok(()),
-            _ => Err(ZygiskError::PltHookCommitError),
+            false => Err(ZygiskError::PltHookCommitError),
         }
     }
 }

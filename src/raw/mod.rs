@@ -14,12 +14,12 @@ pub mod v5;
 #[doc(hidden)]
 pub struct RawModule<'a, Version>
 where
-    Version: ZygiskRaw<'a> + 'a,
+    Version: ZygiskRaw<'a> + 'a + ?Sized,
 {
     #[doc(hidden)]
     pub dispatch: &'a (dyn ZygiskModule<Api = Version> + 'a),
     #[doc(hidden)]
-    pub api_table: RawApiTable<'a, Version>,
+    pub api_table: ApiTableRef<'a, Version>,
     #[doc(hidden)]
     pub jni_env: JNIEnv<'a>,
 }
@@ -27,28 +27,27 @@ where
 #[doc(hidden)]
 #[derive(Clone, Copy)]
 #[repr(transparent)]
-pub struct RawApiTable<'a, Version>(
-    // Note: This is a pointer to const
-    #[doc(hidden)] pub NonNull<<Version as ZygiskRaw<'a>>::ApiTable>,
+pub struct ApiTableRef<'a, Version>(
+    pub(crate) *const <Version as ZygiskRaw<'a>>::ApiTable,
     PhantomData<&'a Version>,
 )
 where
-    Version: ZygiskRaw<'a> + 'a;
+    Version: ZygiskRaw<'a> + 'a + ?Sized;
 
-impl<'a, Version> RawApiTable<'a, Version>
+impl<'a, Version> ApiTableRef<'a, Version>
 where
     Version: ZygiskRaw<'a> + 'a,
 {
     #[doc(hidden)]
-    pub const fn from_non_null(non_null: NonNull<<Version as ZygiskRaw<'a>>::ApiTable>) -> Self {
-        Self(non_null, PhantomData)
+    pub const unsafe fn from_raw(api_tbl: *const <Version as ZygiskRaw<'a>>::ApiTable) -> Self {
+        Self(api_tbl, PhantomData)
     }
 }
 
 #[repr(C)]
 pub struct ModuleAbi<'a, Version>
 where
-    Version: ZygiskRaw<'a> + 'a,
+    Version: ZygiskRaw<'a> + 'a + ?Sized,
 {
     pub(crate) api_version: c_long,
     pub(crate) this: &'a mut RawModule<'a, Version>,
@@ -81,33 +80,31 @@ where
     for<'a> V: ZygiskRaw<'a>,
 {
     pub(crate) this: NonNull<Instance>,
-    pub(crate) register_module_fn: for<'a> unsafe extern "C" fn(
-        NonNull<<V as ZygiskRaw>::ApiTable>,
-        RawModuleAbi<'a, V>,
-    ) -> bool,
+    pub(crate) register_module_fn:
+        for<'a> unsafe extern "C" fn(ApiTableRef<V>, ModuleAbiRef<'a, V>) -> bool,
 }
 
 #[repr(transparent)]
-pub struct RawModuleAbi<'a, Version>(
-    pub(crate) NonNull<ModuleAbi<'a, Version>>,
+pub struct ModuleAbiRef<'a, Version>(
+    pub(crate) *mut ModuleAbi<'a, Version>,
     PhantomData<&'a Version>,
 )
 where
-    Version: ZygiskRaw<'a>;
+    Version: ZygiskRaw<'a> + ?Sized;
 
-impl<'a, Version> RawModuleAbi<'a, Version>
+impl<'a, Version> ModuleAbiRef<'a, Version>
 where
     Version: ZygiskRaw<'a>,
 {
     #[doc(hidden)]
-    pub fn from_non_null(non_null: NonNull<ModuleAbi<'a, Version>>) -> Self {
-        Self(non_null, PhantomData)
+    pub const unsafe fn from_raw(module_abi: *mut ModuleAbi<'a, Version>) -> Self {
+        Self(module_abi, PhantomData)
     }
 }
 
 pub trait ZygiskRaw<'a>
 where
-    Self: Sealed + Copy + Sized + 'a,
+    Self: Sealed + 'a,
 {
     const API_VERSION: c_long;
     type ApiTable: 'a;
@@ -117,9 +114,6 @@ where
     fn abi_from_module(module: &'a mut RawModule<'a, Self>) -> ModuleAbi<'a, Self>;
 
     fn register_module_fn(
-        table: &'a <Self as ZygiskRaw<'a>>::ApiTable,
-    ) -> for<'b> unsafe extern "C" fn(
-        NonNull<<Self as ZygiskRaw<'a>>::ApiTable>,
-        RawModuleAbi<'b, Self>,
-    ) -> bool;
+        table: ApiTableRef<'a, Self>,
+    ) -> for<'b> unsafe extern "C" fn(ApiTableRef<'a, Self>, ModuleAbiRef<'b, Self>) -> bool;
 }

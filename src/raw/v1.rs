@@ -5,7 +5,7 @@ use libc::{c_char, c_int, c_long};
 
 use crate::api::{V1, ZygiskApi};
 
-use super::{BaseApi, Instance, ModuleAbi, RawModule, RawModuleAbi, ZygiskRaw};
+use super::{ApiTableRef, BaseApi, Instance, ModuleAbi, ModuleAbiRef, RawModule, ZygiskRaw};
 pub(crate) mod transparent {
     use jni::{
         objects::JString,
@@ -128,8 +128,8 @@ impl<'a> ZygiskRaw<'a> for V1 {
     }
 
     fn register_module_fn(
-        table: &'a Self::ApiTable,
-    ) -> unsafe extern "C" fn(NonNull<Self::ApiTable>, RawModuleAbi<'_, V1>) -> bool {
-        table.base.register_module_fn
+        table: ApiTableRef<Self>,
+    ) -> unsafe extern "C" fn(ApiTableRef<Self>, ModuleAbiRef<'_, Self>) -> bool {
+        unsafe { &*table.0 }.base.register_module_fn
     }
 }

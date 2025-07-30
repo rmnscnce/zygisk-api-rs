@@ -1,13 +1,7 @@
-use core::{
-    ops::Deref,
-    ptr::{self, NonNull},
-};
-use std::{
-    ffi,
-    os::{
-        fd::{FromRawFd, RawFd},
-        unix::net::UnixStream,
-    },
+use core::{ffi, ops::Deref, ptr::NonNull};
+use std::os::{
+    fd::{FromRawFd, RawFd},
+    unix::net::UnixStream,
 };
 
 use jni::{JNIEnv, strings::JNIStr, sys::JNINativeMethod};
@@ -88,20 +82,12 @@ impl super::ZygiskApi<'_, V4> {
         &mut self,
         device: dev_t,
         inode: ino_t,
-        symbol: impl AsRef<str>,
+        symbol: impl AsRef<ffi::CStr>,
         replacement: NonNull<FnPtr>,
-    ) -> Result<NonNull<FnPtr>, ZygiskError> {
+    ) -> NonNull<FnPtr> {
         let symbol = symbol.as_ref();
         // constexpr assertion <FnPtr>
         let _: () = utils::ShapeAssertion::<FnPtr, extern "C" fn()>::ASSERT;
-
-        let symbol = match symbol.is_empty() {
-            true => ptr::null(),
-            false => match ffi::CString::new(symbol) {
-                Ok(symbol) => symbol.as_bytes_with_nul().as_ptr().cast(),
-                Err(e) => return Err(ZygiskError::IncompatibleWithCStr(e)),
-            },
-        };
 
         let original = NonNull::dangling();
 
@@ -109,12 +95,12 @@ impl super::ZygiskApi<'_, V4> {
             (self.dispatch().plt_hook_register_fn)(
                 device,
                 inode,
-                symbol,
+                symbol.to_bytes_with_nul().as_ptr().cast(),
                 replacement.as_ptr().cast(),
                 Some(NonNull::new_unchecked(original.as_ptr() as *mut _)),
             )
         };
 
-        Ok(original)
+        original
     }
 }

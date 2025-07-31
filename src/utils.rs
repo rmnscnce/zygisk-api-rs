@@ -8,21 +8,58 @@ impl<T, U> ShapeAssertion<T, U> {
     };
 }
 
-pub struct Local<T>(cell::UnsafeCell<mem::MaybeUninit<T>>);
+pub struct Local<T>(cell::UnsafeCell<mem::MaybeUninit<T>>, cell::Cell<bool>);
 
 impl<T> Local<T> {
-    pub const fn uninit() -> Self {
-        Self(cell::UnsafeCell::new(mem::MaybeUninit::uninit()))
+    pub const fn new() -> Self {
+        Self(
+            cell::UnsafeCell::new(mem::MaybeUninit::uninit()),
+            cell::Cell::new(false),
+        )
     }
 
-    pub fn boxed(&self, val: T) -> LocalBox<T> {
+    pub const fn boxed(&self, val: T) -> LocalBox<T> {
         let mem_place = unsafe { &mut *self.0.get() };
         let _ = mem_place.write(val);
+        let _ = self.1.replace(true);
 
         LocalBox(
-            unsafe { ptr::NonNull::new_unchecked((&mut *self.0.get()).as_mut_ptr()) },
+            unsafe { ptr::NonNull::new_unchecked(mem_place.as_mut_ptr()) },
             PhantomLifetime::DEFAULT,
         )
+    }
+
+    pub fn boxed_with<F>(&self, f: F) -> LocalBox<T>
+    where
+        F: FnOnce() -> T,
+    {
+        self.boxed(f())
+    }
+}
+
+impl<T> Default for Local<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T> Local<T>
+where
+    T: Default,
+{
+    pub fn default_boxed(&self) -> LocalBox<T> {
+        self.boxed(T::default())
+    }
+}
+
+impl<T> Drop for Local<T> {
+    fn drop(&mut self) {
+        if self.1.get() {
+            // # Safety: We have determined that the value is initialized
+            unsafe {
+                (&mut *self.0.get()).assume_init_drop();
+            }
+        }
     }
 }
 
@@ -45,8 +82,16 @@ impl<'local, T> LocalBox<'local, T>
 where
     T: ?Sized,
 {
-    pub const fn into_raw(this: Self) -> *mut T {
+    pub const fn as_ptr(this: &Self) -> *const T {
+        this.0.as_ptr() as *const _
+    }
+
+    pub const fn as_mut_ptr(this: &Self) -> *mut T {
         this.0.as_ptr()
+    }
+
+    pub const fn into_raw(this: Self) -> *mut T {
+        Self::as_mut_ptr(&this)
     }
 
     pub const fn leak<'a>(this: Self) -> &'a mut T

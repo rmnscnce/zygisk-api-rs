@@ -77,9 +77,9 @@ macro_rules! register_module {
                 impl Place<'_> {
                     const fn new() -> Self {
                         Self {
-                            module: $crate::utils::Local::uninit(),
-                            raw_module: $crate::utils::Local::uninit(),
-                            module_abi: $crate::utils::Local::uninit(),
+                            module: $crate::utils::Local::new(),
+                            raw_module: $crate::utils::Local::new(),
+                            module_abi: $crate::utils::Local::new(),
                         }
                     }
                 }

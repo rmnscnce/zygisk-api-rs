@@ -2,9 +2,12 @@ use core::{cell, marker, mem, ops, ptr};
 
 pub struct ShapeAssertion<T, U>(T, U);
 impl<T, U> ShapeAssertion<T, U> {
-    pub const ASSERT: () = const {
-        assert!(mem::size_of::<T>() == mem::size_of::<U>());
-        assert!(mem::align_of::<T>() % mem::align_of::<U>() == 0);
+    pub const ASSERT: () = {
+        assert!(mem::size_of::<T>() == mem::size_of::<U>(), "size mismatch");
+        assert!(
+            mem::align_of::<T>() % mem::align_of::<U>() == 0,
+            "incorrect alignment"
+        );
     };
 }
 
@@ -27,13 +30,6 @@ impl<T> Local<T> {
             unsafe { ptr::NonNull::new_unchecked(mem_place.as_mut_ptr()) },
             PhantomLifetime::DEFAULT,
         )
-    }
-
-    pub fn boxed_with<F>(&self, f: F) -> LocalBox<T>
-    where
-        F: FnOnce() -> T,
-    {
-        self.boxed(f())
     }
 }
 

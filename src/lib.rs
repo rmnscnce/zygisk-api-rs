@@ -84,7 +84,7 @@ macro_rules! register_module {
                     }
                 }
 
-                static PLACE: Place = const { Place::new() };
+                static PLACE: Place = Place::new();
 
                 let Place {
                     module,

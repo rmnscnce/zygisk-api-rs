@@ -103,4 +103,11 @@ impl super::ZygiskApi<'_, V4> {
 
         original
     }
+
+    pub fn plt_hook_commit(&mut self) -> Result<(), ZygiskError> {
+        match unsafe { (self.dispatch().plt_hook_commit_fn)() } {
+            true => Ok(()),
+            false => Err(ZygiskError::PltHookCommitError),
+        }
+    }
 }

@@ -1,4 +1,4 @@
-use core::{ffi, ops::Deref, ptr::NonNull};
+use core::{ffi, mem, ops::Deref, ptr::NonNull};
 use std::os::{
     fd::{FromRawFd, RawFd},
     unix::net::UnixStream,
@@ -78,30 +78,31 @@ impl super::ZygiskApi<'_, V4> {
 
     /// # Safety
     ///
-    pub unsafe fn plt_hook_register<FnPtr>(
+    pub unsafe fn plt_hook_register(
         &mut self,
         device: dev_t,
         inode: ino_t,
         symbol: impl AsRef<ffi::CStr>,
-        replacement: NonNull<FnPtr>,
-    ) -> NonNull<FnPtr> {
+        replacement: *const (),
+    ) -> *const () {
         let symbol = symbol.as_ref();
-        // constexpr assertion <FnPtr>
-        let _: () = utils::ShapeAssertion::<FnPtr, extern "C" fn()>::ASSERT;
 
-        let original = NonNull::dangling();
+        // fail compilation if data and function pointer sizes don't match (not supported)
+        let _: () = utils::ShapeAssertion::<*const (), extern "C" fn()>::ASSERT;
+
+        let mut original = mem::MaybeUninit::uninit();
 
         unsafe {
             (self.dispatch().plt_hook_register_fn)(
                 device,
                 inode,
                 symbol.to_bytes_with_nul().as_ptr().cast(),
-                replacement.as_ptr().cast(),
-                Some(NonNull::new_unchecked(original.as_ptr() as *mut _)),
+                replacement.cast(),
+                original.as_mut_ptr(),
             )
         };
 
-        original
+        unsafe { original.assume_init() }.cast()
     }
 
     pub fn plt_hook_commit(&mut self) -> Result<(), ZygiskError> {

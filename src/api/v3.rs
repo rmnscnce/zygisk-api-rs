@@ -1,4 +1,4 @@
-use core::{ffi, ptr::NonNull};
+use core::{ffi, mem, ptr::NonNull};
 use std::os::{
     fd::{FromRawFd, RawFd},
     unix::net::UnixStream,
@@ -76,32 +76,33 @@ impl super::ZygiskApi<'_, V3> {
 
     /// # Safety
     ///
-    pub unsafe fn plt_hook_register<S, FnPtr>(
+    pub unsafe fn plt_hook_register<S>(
         &mut self,
         regex: S,
         symbol: S,
-        replacement: NonNull<FnPtr>,
-    ) -> NonNull<FnPtr>
+        new_func: *const (),
+    ) -> *const ()
     where
         S: AsRef<ffi::CStr>,
     {
         let regex = regex.as_ref();
         let symbol = symbol.as_ref();
-        // constexpr assertion <FnPtr>
-        let _: () = utils::ShapeAssertion::<FnPtr, extern "C" fn()>::ASSERT;
 
-        let old_func = NonNull::dangling();
+        // fail compilation if data and function pointer sizes don't match (not supported)
+        let _: () = utils::ShapeAssertion::<*const (), extern "C" fn()>::ASSERT;
+
+        let mut old_func = mem::MaybeUninit::uninit();
 
         unsafe {
             (self.dispatch().plt_hook_register_fn)(
                 regex.to_bytes_with_nul().as_ptr().cast(),
                 symbol.to_bytes_with_nul().as_ptr().cast(),
-                replacement.as_ptr().cast(),
-                Some(NonNull::new_unchecked(old_func.as_ptr() as *mut _)),
+                new_func.cast(),
+                old_func.as_mut_ptr(),
             )
         };
 
-        old_func
+        unsafe { old_func.assume_init() }.cast()
     }
 
     /// # Safety

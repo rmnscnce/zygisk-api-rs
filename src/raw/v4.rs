@@ -19,8 +19,13 @@ pub struct ApiTable {
 
     pub(crate) hook_jni_native_methods_fn:
         unsafe extern "C" fn(JNIEnv<'_>, *const c_char, NonNull<JNINativeMethod>, c_int),
-    pub(crate) plt_hook_register_fn:
-        unsafe extern "C" fn(dev_t, ino_t, *const c_char, *const (), Option<NonNull<*const ()>>),
+    pub(crate) plt_hook_register_fn: unsafe extern "C" fn(
+        dev_t,
+        ino_t,
+        *const c_char,
+        *const libc::c_void,
+        *mut *const libc::c_void,
+    ),
     pub(crate) exempt_fd_fn: extern "C" fn(c_int) -> bool,
     pub(crate) plt_hook_commit_fn: extern "C" fn() -> bool,
     pub(crate) connect_companion_fn: unsafe extern "C" fn(NonNull<Instance>) -> c_int,

@@ -78,6 +78,7 @@ impl super::ZygiskApi<'_, V4> {
 
     /// # Safety
     ///
+    #[must_use]
     pub unsafe fn plt_hook_register(
         &mut self,
         device: dev_t,

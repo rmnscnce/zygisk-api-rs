@@ -77,6 +77,7 @@ impl super::ZygiskApi<'_, V2> {
 
     /// # Safety
     ///
+    #[must_use]
     pub unsafe fn plt_hook_register<S>(
         &mut self,
         regex: S,

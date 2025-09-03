@@ -100,6 +100,7 @@ impl super::ZygiskApi<'_, V1> {
     ///
     /// This function is unsafe, since a badly designed hook or misuse of raw pointers may lead to
     /// memory unsafety.
+    #[must_use]
     pub unsafe fn plt_hook_register<S>(
         &mut self,
         regex: S,

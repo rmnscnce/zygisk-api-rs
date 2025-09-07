@@ -1,4 +1,8 @@
-use core::{ffi, mem, ops::Deref, ptr::NonNull};
+use core::{
+    ffi,
+    ops::Deref,
+    ptr::{self, NonNull},
+};
 use std::os::{fd::FromRawFd, unix::net::UnixStream};
 
 use jni::{JNIEnv, strings::JNIStr, sys::JNINativeMethod};
@@ -116,18 +120,18 @@ impl super::ZygiskApi<'_, V1> {
         // fail compilation if data and function pointer sizes don't match (not supported)
         let _: () = utils::ShapeAssertion::<*const (), extern "C" fn()>::ASSERT;
 
-        let mut old_func = mem::MaybeUninit::uninit();
+        let mut original = ptr::null();
 
         unsafe {
             (self.dispatch().plt_hook_register_fn)(
                 regex.to_bytes_with_nul().as_ptr().cast(),
                 symbol.to_bytes_with_nul().as_ptr().cast(),
                 new_func.cast(),
-                old_func.as_mut_ptr(),
+                &raw mut original,
             )
         };
 
-        unsafe { old_func.assume_init() }.cast()
+        original as _
     }
 
     /// For ELFs loaded in memory matching `regex`, exclude hooks registered for `symbol`.

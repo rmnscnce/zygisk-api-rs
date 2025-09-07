@@ -1,4 +1,8 @@
-use core::{ffi, mem, ops::Deref, ptr::NonNull};
+use core::{
+    ffi,
+    ops::Deref,
+    ptr::{self, NonNull},
+};
 use std::os::{
     fd::{FromRawFd, RawFd},
     unix::net::UnixStream,
@@ -91,7 +95,7 @@ impl super::ZygiskApi<'_, V5> {
         // fail compilation if data and function pointer sizes don't match (not supported)
         let _: () = utils::ShapeAssertion::<*const (), extern "C" fn()>::ASSERT;
 
-        let mut original = mem::MaybeUninit::uninit();
+        let mut original = ptr::null();
 
         unsafe {
             (self.dispatch().plt_hook_register_fn)(
@@ -99,11 +103,11 @@ impl super::ZygiskApi<'_, V5> {
                 inode,
                 symbol.to_bytes_with_nul().as_ptr().cast(),
                 replacement.cast(),
-                original.as_mut_ptr(),
+                &raw mut original,
             )
         };
 
-        unsafe { original.assume_init() }.cast()
+        original as _
     }
 
     pub fn plt_hook_commit(&mut self) -> Result<(), ZygiskError> {

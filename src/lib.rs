@@ -68,56 +68,69 @@ macro_rules! register_module {
                 type RawModule<'a> = $crate::raw::RawModule<'a, Api>;
                 type ModuleAbi<'a> = $crate::raw::ModuleAbi<'a, Api>;
 
-                struct Place<'a> {
-                    module: $crate::utils::Local<$module>,
-                    raw_module: $crate::utils::Local<RawModule<'a>>,
-                    module_abi: $crate::utils::Local<ModuleAbi<'a>>,
+                struct ModuleInstance {
+                    instance: ::core::cell::OnceCell<$module>,
+                    raw_module:
+                        ::core::cell::OnceCell<::core::cell::UnsafeCell<RawModule<'static>>>,
+                    module_abi:
+                        ::core::cell::OnceCell<::core::cell::UnsafeCell<ModuleAbi<'static>>>,
                 }
 
-                impl Place<'_> {
+                impl ModuleInstance {
                     const fn new() -> Self {
                         Self {
-                            module: $crate::utils::Local::new(),
-                            raw_module: $crate::utils::Local::new(),
-                            module_abi: $crate::utils::Local::new(),
+                            instance: ::core::cell::OnceCell::new(),
+                            raw_module: ::core::cell::OnceCell::new(),
+                            module_abi: ::core::cell::OnceCell::new(),
                         }
                     }
                 }
 
-                static PLACE: Place = Place::new();
-
-                let Place {
-                    module,
-                    raw_module,
-                    module_abi,
-                } = &PLACE;
-
-                let module = $crate::utils::LocalBox::leak(
-                    module.boxed(::core::default::Default::default()),
-                );
-                let api_table =
-                    unsafe { $crate::raw::ApiTableRef::from_raw(api_table as *const _) };
-                let raw_module =
-                    $crate::utils::LocalBox::leak(raw_module.boxed($crate::raw::RawModule {
-                        dispatch: module,
-                        api_table: ::core::clone::Clone::clone(&api_table),
-                        jni_env: unsafe { $crate::jni::JNIEnv::from_raw(env).unwrap_unchecked() },
-                    }));
-                let module_abi =
-                    module_abi.boxed(<Api as $crate::raw::ZygiskRaw>::abi_from_module(raw_module));
-                let abi = unsafe {
-                    $crate::raw::ModuleAbiRef::from_raw($crate::utils::LocalBox::into_raw(
-                        module_abi,
-                    ))
-                };
-
-                if unsafe {
-                    <Api as $crate::raw::ZygiskRaw>::register_module_fn(api_table)(api_table, abi)
-                } {
-                    module.on_load($crate::api::ZygiskApi(api_table), unsafe {
-                        $crate::jni::JNIEnv::from_raw(env).unwrap_unchecked()
-                    })
+                ::std::thread_local! {
+                    static INSTANCE: ModuleInstance = const { ModuleInstance::new() };
                 }
+
+                INSTANCE.with(move |inst| {
+                    let _ = inst
+                        .instance
+                        .set(<$module as ::core::default::Default>::default());
+                    let api_table =
+                        unsafe { $crate::raw::ApiTableRef::from_raw(api_table as *const _) };
+                    #[allow(clippy::missing_transmute_annotations)]
+                    let _ = inst.raw_module.set(unsafe {
+                        ::core::mem::transmute(::core::cell::UnsafeCell::new(
+                            $crate::raw::RawModule {
+                                dispatch: inst.instance.get().unwrap(),
+                                api_table: ::core::clone::Clone::clone(&api_table),
+                                jni_env: $crate::jni::JNIEnv::from_raw(env).unwrap_unchecked(),
+                            },
+                        ))
+                    });
+                    let _ = inst.module_abi.set(::core::cell::UnsafeCell::new(
+                        <Api as $crate::raw::ZygiskRaw>::abi_from_module(unsafe {
+                            &mut *inst.raw_module.get().unwrap_unchecked().get()
+                        }),
+                    ));
+
+                    let abi = unsafe {
+                        $crate::raw::ModuleAbiRef::from_raw(
+                            inst.module_abi.get().unwrap_unchecked().get(),
+                        )
+                    };
+
+                    if unsafe {
+                        <Api as $crate::raw::ZygiskRaw>::register_module_fn(api_table)(
+                            api_table, abi,
+                        )
+                    } {
+                        inst.instance
+                            .get()
+                            .unwrap()
+                            .on_load($crate::api::ZygiskApi(api_table), unsafe {
+                                $crate::jni::JNIEnv::from_raw(env).unwrap_unchecked()
+                            })
+                    }
+                });
             })
             .is_err()
             {

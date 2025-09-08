@@ -1,4 +1,8 @@
-use core::{ffi, ops::Deref, ptr::NonNull};
+use core::{
+    ffi,
+    ops::Deref,
+    ptr::{self, NonNull},
+};
 use std::os::{
     fd::{FromRawFd, RawFd},
     unix::net::UnixStream,
@@ -93,14 +97,14 @@ impl super::ZygiskApi<'_, V2> {
         // fail compilation if data and function pointer sizes don't match (not supported)
         let _: () = utils::ShapeAssertion::<*const (), extern "C" fn()>::ASSERT;
 
-        let mut original = usize::MAX;
+        let mut original = ptr::null();
 
         unsafe {
             (self.dispatch().plt_hook_register_fn)(
                 regex.to_bytes_with_nul().as_ptr().cast(),
                 symbol.to_bytes_with_nul().as_ptr().cast(),
                 new_func.cast(),
-                &raw mut original as _,
+                &raw mut original,
             )
         };
 

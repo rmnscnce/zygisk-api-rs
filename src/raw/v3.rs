@@ -54,7 +54,7 @@ pub struct ApiTable {
         *const c_char,
         *const c_char,
         *const libc::c_void,
-        *mut *const libc::c_void,
+        &mut *const libc::c_void,
     ),
     pub(crate) plt_hook_exclude_fn: unsafe extern "C" fn(*const c_char, *const c_char),
     pub(crate) plt_hook_commit_fn: extern "C" fn() -> bool,

@@ -24,7 +24,7 @@ pub struct ApiTable {
         ino_t,
         *const c_char,
         *const libc::c_void,
-        *mut *const libc::c_void,
+        &mut *const libc::c_void,
     ),
     pub(crate) exempt_fd_fn: extern "C" fn(c_int) -> bool,
     pub(crate) plt_hook_commit_fn: extern "C" fn() -> bool,

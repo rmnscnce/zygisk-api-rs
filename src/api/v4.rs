@@ -103,7 +103,7 @@ impl super::ZygiskApi<'_, V4> {
                 inode,
                 symbol.to_bytes_with_nul().as_ptr().cast(),
                 replacement.cast(),
-                &raw mut original,
+                &mut original,
             )
         };
 

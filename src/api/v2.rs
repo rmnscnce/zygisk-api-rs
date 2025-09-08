@@ -104,7 +104,7 @@ impl super::ZygiskApi<'_, V2> {
                 regex.to_bytes_with_nul().as_ptr().cast(),
                 symbol.to_bytes_with_nul().as_ptr().cast(),
                 new_func.cast(),
-                &raw mut original,
+                &mut original,
             )
         };
 

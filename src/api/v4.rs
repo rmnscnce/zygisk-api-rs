@@ -1,8 +1,4 @@
-use core::{
-    ffi,
-    ops::Deref,
-    ptr::{self, NonNull},
-};
+use core::{ffi, mem, ops::Deref, ptr::NonNull};
 use std::os::{
     fd::{FromRawFd, RawFd},
     unix::net::UnixStream,
@@ -82,20 +78,24 @@ impl super::ZygiskApi<'_, V4> {
 
     /// # Safety
     ///
-    #[must_use]
-    pub unsafe fn plt_hook_register(
-        &mut self,
+    pub unsafe fn plt_hook_register<'a, 'b>(
+        &'a mut self,
         device: dev_t,
         inode: ino_t,
         symbol: impl AsRef<ffi::CStr>,
         replacement: *const (),
-    ) -> *const () {
+        original: &'b mut *const (),
+    ) where
+        'b: 'a,
+    {
         let symbol = symbol.as_ref();
 
         // fail compilation if data and function pointer sizes don't match (not supported)
         let _: () = utils::ShapeAssertion::<*const (), extern "C" fn()>::ASSERT;
 
-        let mut original = ptr::null();
+        // SAFETY: We ensure that the lifetime of `original` outlives the call to the C function.
+        let original =
+            unsafe { mem::transmute::<&'b mut *const (), &'b mut *const libc::c_void>(original) };
 
         unsafe {
             (self.dispatch().plt_hook_register_fn)(
@@ -103,11 +103,9 @@ impl super::ZygiskApi<'_, V4> {
                 inode,
                 symbol.to_bytes_with_nul().as_ptr().cast(),
                 replacement.cast(),
-                &mut original,
+                original,
             )
-        };
-
-        original as *const _
+        }
     }
 
     pub fn plt_hook_commit(&mut self) -> Result<(), ZygiskError> {

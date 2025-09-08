@@ -1,8 +1,4 @@
-use core::{
-    ffi,
-    ops::Deref,
-    ptr::{self, NonNull},
-};
+use core::{ffi, mem, ops::Deref, ptr::NonNull};
 use std::os::{
     fd::{FromRawFd, RawFd},
     unix::net::UnixStream,
@@ -81,14 +77,14 @@ impl super::ZygiskApi<'_, V2> {
 
     /// # Safety
     ///
-    #[must_use]
-    pub unsafe fn plt_hook_register<S>(
-        &mut self,
+    pub unsafe fn plt_hook_register<'a, 'b, S>(
+        &'a mut self,
         regex: S,
         symbol: S,
         new_func: *const (),
-    ) -> *const ()
-    where
+        old_func: &'b mut *const (),
+    ) where
+        'b: 'a,
         S: AsRef<ffi::CStr>,
     {
         let regex = regex.as_ref();
@@ -97,18 +93,17 @@ impl super::ZygiskApi<'_, V2> {
         // fail compilation if data and function pointer sizes don't match (not supported)
         let _: () = utils::ShapeAssertion::<*const (), extern "C" fn()>::ASSERT;
 
-        let mut original = ptr::null();
+        let old_func =
+            unsafe { mem::transmute::<&'b mut *const (), &'b mut *const libc::c_void>(old_func) };
 
         unsafe {
             (self.dispatch().plt_hook_register_fn)(
                 regex.to_bytes_with_nul().as_ptr().cast(),
                 symbol.to_bytes_with_nul().as_ptr().cast(),
                 new_func.cast(),
-                &mut original,
+                old_func,
             )
-        };
-
-        original as *const _
+        }
     }
 
     /// # Safety

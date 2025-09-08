@@ -131,7 +131,7 @@ impl super::ZygiskApi<'_, V1> {
             )
         };
 
-        original as _
+        original as *const _
     }
 
     /// For ELFs loaded in memory matching `regex`, exclude hooks registered for `symbol`.

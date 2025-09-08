@@ -107,7 +107,7 @@ impl super::ZygiskApi<'_, V4> {
             )
         };
 
-        original as _
+        original as *const _
     }
 
     pub fn plt_hook_commit(&mut self) -> Result<(), ZygiskError> {

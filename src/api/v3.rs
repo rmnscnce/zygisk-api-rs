@@ -106,7 +106,7 @@ impl super::ZygiskApi<'_, V3> {
             )
         };
 
-        original as _
+        original as *const _
     }
 
     /// # Safety

@@ -1,4 +1,6 @@
 #![warn(clippy::std_instead_of_core)]
+#![no_std]
+extern crate std;
 
 use api::ZygiskApi;
 use jni::JNIEnv;
@@ -57,108 +59,110 @@ pub trait ZygiskModule {
 #[macro_export]
 macro_rules! register_module {
     ($module:ty) => {
-        #[doc(hidden)]
-        #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn zygisk_module_entry(
-            api_table: *const (),
-            env: *mut $crate::jni::sys::JNIEnv,
-        ) {
-            if ::std::panic::catch_unwind(move || {
-                type Api = <$module as $crate::ZygiskModule>::Api;
-                type RawModule<'a> = $crate::raw::RawModule<'a, Api>;
-                type ModuleAbi<'a> = $crate::raw::ModuleAbi<'a, Api>;
+        const _: () = {
+            #[unsafe(export_name = "zygisk_module_entry")]
+            unsafe extern "C" fn module_entry(
+                api_table: *const (),
+                env: *mut $crate::jni::sys::JNIEnv,
+            ) {
+                if ::std::panic::catch_unwind(
+                    #[inline(always)]
+                    move || {
+                        type Api = <$module as $crate::ZygiskModule>::Api;
+                        type RawModule<'a> = $crate::raw::RawModule<'a, Api>;
+                        type ModuleAbi<'a> = $crate::raw::ModuleAbi<'a, Api>;
 
-                struct ModuleInstance {
-                    instance: ::core::cell::OnceCell<$module>,
-                    raw_module:
-                        ::core::cell::OnceCell<::core::cell::UnsafeCell<RawModule<'static>>>,
-                    module_abi:
-                        ::core::cell::OnceCell<::core::cell::UnsafeCell<ModuleAbi<'static>>>,
-                }
+                        #[repr(transparent)]
+                        struct AssertSyncUnsafeCell<T>(::core::cell::UnsafeCell<T>);
 
-                impl ModuleInstance {
-                    const fn new() -> Self {
-                        Self {
-                            instance: ::core::cell::OnceCell::new(),
-                            raw_module: ::core::cell::OnceCell::new(),
-                            module_abi: ::core::cell::OnceCell::new(),
+                        unsafe impl<T> Sync for AssertSyncUnsafeCell<T> {}
+
+                        impl<T> AssertSyncUnsafeCell<T> {
+                            #[inline(always)]
+                            const fn new(value: T) -> Self {
+                                Self(::core::cell::UnsafeCell::new(value))
+                            }
                         }
-                    }
-                }
 
-                ::std::thread_local! {
-                    static INSTANCE: ModuleInstance = const { ModuleInstance::new() };
-                }
+                        static INSTANCE: AssertSyncUnsafeCell<::core::mem::MaybeUninit<$module>> =
+                            const { AssertSyncUnsafeCell::new(::core::mem::MaybeUninit::uninit()) };
+                        static RAW_MODULE: AssertSyncUnsafeCell<
+                            ::core::mem::MaybeUninit<RawModule<'static>>,
+                        > = AssertSyncUnsafeCell::new(::core::mem::MaybeUninit::uninit());
+                        static MODULE_ABI: AssertSyncUnsafeCell<
+                            ::core::mem::MaybeUninit<ModuleAbi<'static>>,
+                        > = const { AssertSyncUnsafeCell::new(::core::mem::MaybeUninit::uninit()) };
 
-                INSTANCE.with(move |inst| {
-                    let _ = inst
-                        .instance
-                        .set(<$module as ::core::default::Default>::default());
-                    let api_table =
-                        unsafe { $crate::raw::ApiTableRef::from_raw(api_table as *const _) };
-                    #[allow(clippy::missing_transmute_annotations)]
-                    let _ = inst.raw_module.set(unsafe {
-                        ::core::mem::transmute(::core::cell::UnsafeCell::new(
-                            $crate::raw::RawModule {
-                                dispatch: inst.instance.get().unwrap(),
-                                api_table: ::core::clone::Clone::clone(&api_table),
-                                jni_env: $crate::jni::JNIEnv::from_raw(env).unwrap_unchecked(),
-                            },
-                        ))
-                    });
-                    let _ = inst.module_abi.set(::core::cell::UnsafeCell::new(
-                        <Api as $crate::raw::ZygiskRaw>::abi_from_module(unsafe {
-                            &mut *inst.raw_module.get().unwrap_unchecked().get()
-                        }),
-                    ));
+                        unsafe { &mut *INSTANCE.0.get() }
+                            .write(<$module as ::core::default::Default>::default());
+                        let api_table =
+                            unsafe { $crate::raw::ApiTableRef::from_raw(api_table as *const _) };
 
-                    let abi = unsafe {
-                        $crate::raw::ModuleAbiRef::from_raw(
-                            inst.module_abi.get().unwrap_unchecked().get(),
-                        )
-                    };
-
-                    if unsafe {
-                        <Api as $crate::raw::ZygiskRaw>::register_module_fn(api_table)(
-                            api_table, abi,
-                        )
-                    } {
-                        inst.instance
-                            .get()
-                            .unwrap()
-                            .on_load($crate::api::ZygiskApi(api_table), unsafe {
+                        unsafe { &mut *RAW_MODULE.0.get() }.write($crate::raw::RawModule {
+                            dispatch: unsafe { (&*INSTANCE.0.get()).assume_init_ref() },
+                            api_table: ::core::clone::Clone::clone(&api_table),
+                            jni_env: unsafe {
                                 $crate::jni::JNIEnv::from_raw(env).unwrap_unchecked()
-                            })
-                    }
-                });
-            })
-            .is_err()
-            {
-                ::std::process::abort();
+                            },
+                        });
+
+                        unsafe { &mut *MODULE_ABI.0.get() }.write(
+                            <Api as $crate::raw::ZygiskRaw>::abi_from_module(unsafe {
+                                (&mut *RAW_MODULE.0.get()).assume_init_mut()
+                            }),
+                        );
+
+                        let abi = unsafe {
+                            $crate::raw::ModuleAbiRef::from_raw(
+                                (&mut *MODULE_ABI.0.get()).as_mut_ptr(),
+                            )
+                        };
+
+                        if unsafe {
+                            <Api as $crate::raw::ZygiskRaw>::register_module_fn(api_table)(
+                                api_table, abi,
+                            )
+                        } {
+                            unsafe { (&*INSTANCE.0.get()).assume_init_ref() }
+                                .on_load($crate::api::ZygiskApi(api_table), unsafe {
+                                    $crate::jni::JNIEnv::from_raw(env).unwrap_unchecked()
+                                })
+                        }
+                    },
+                )
+                .is_err()
+                {
+                    ::std::process::abort();
+                }
             }
-        }
+        };
     };
 }
 
 #[macro_export]
 macro_rules! register_companion {
     ($func: expr) => {
-        #[doc(hidden)]
-        #[unsafe(no_mangle)]
-        pub extern "C" fn zygisk_companion_entry(sock_fd: ::std::os::fd::OwnedFd) {
-            if ::std::panic::catch_unwind(move || {
-                let mut stream = <::std::os::unix::net::UnixStream as ::core::convert::From<
-                    ::std::os::fd::OwnedFd,
-                >>::from(sock_fd);
+        const _: () = {
+            #[unsafe(export_name = "zygisk_companion_entry")]
+            extern "C" fn companion_entry(sock_fd: ::std::os::fd::OwnedFd) {
+                if ::std::panic::catch_unwind(
+                    #[inline(always)]
+                    move || {
+                        let mut stream =
+                            <::std::os::unix::net::UnixStream as ::core::convert::From<
+                                ::std::os::fd::OwnedFd,
+                            >>::from(sock_fd);
 
-                let func: for<'a> fn(&'a mut ::std::os::unix::net::UnixStream) = $func;
-                func(&mut stream)
-            })
-            .is_err()
-            {
-                ::std::process::abort();
+                        let func: for<'a> fn(&'a mut ::std::os::unix::net::UnixStream) = $func;
+                        func(&mut stream)
+                    },
+                )
+                .is_err()
+                {
+                    ::std::process::abort();
+                }
             }
-        }
+        };
     };
 }
 

@@ -39,6 +39,7 @@ where
     Version: ZygiskRaw<'a> + 'a,
 {
     #[doc(hidden)]
+    #[inline(always)]
     pub const unsafe fn from_raw(api_tbl: *const <Version as ZygiskRaw<'a>>::ApiTable) -> Self {
         Self(api_tbl, PhantomData)
     }
@@ -97,6 +98,7 @@ where
     Version: ZygiskRaw<'a>,
 {
     #[doc(hidden)]
+    #[inline(always)]
     pub const unsafe fn from_raw(module_abi: *mut ModuleAbi<'a, Version>) -> Self {
         Self(module_abi, PhantomData)
     }

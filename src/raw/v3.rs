@@ -70,6 +70,7 @@ impl<'a> ZygiskRaw<'a> for V3 {
     type AppSpecializeArgs = transparent::AppSpecializeArgs<'a>;
     type ServerSpecializeArgs = transparent::ServerSpecializeArgs<'a>;
 
+    #[inline(always)]
     fn abi_from_module(module: &'a mut super::RawModule<'a, Self>) -> ModuleAbi<'a, Self> {
         extern "C" fn pre_app_specialize<'a>(
             m: &mut RawModule<'a, V3>,
@@ -125,6 +126,7 @@ impl<'a> ZygiskRaw<'a> for V3 {
         }
     }
 
+    #[inline(always)]
     fn register_module_fn(
         table: ApiTableRef<Self>,
     ) -> unsafe extern "C" fn(ApiTableRef<Self>, ModuleAbiRef<'_, Self>) -> bool {

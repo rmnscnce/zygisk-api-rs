@@ -16,6 +16,7 @@ pub struct V3;
 impl Sealed for V3 {}
 
 impl super::ZygiskApi<'_, V3> {
+    #[inline(always)]
     pub fn with_companion<R>(
         &mut self,
         f: impl FnOnce(&mut UnixStream) -> R,
@@ -31,18 +32,21 @@ impl super::ZygiskApi<'_, V3> {
         }
     }
 
+    #[inline(always)]
     pub fn get_module_dir(&self) -> RawFd {
         let api_dispatch = unsafe { self.dispatch() };
 
         unsafe { (api_dispatch.get_module_dir_fn)(api_dispatch.base.this) }
     }
 
+    #[inline(always)]
     pub fn set_option(&mut self, option: ZygiskOption) {
         let api_dispatch = unsafe { self.dispatch() };
 
         unsafe { (api_dispatch.set_option_fn)(api_dispatch.base.this, option) }
     }
 
+    #[inline(always)]
     pub fn get_flags(&self) -> Result<StateFlags, ZygiskError> {
         let api_dispatch = unsafe { self.dispatch() };
 
@@ -56,6 +60,7 @@ impl super::ZygiskApi<'_, V3> {
 
     /// # Safety
     ///
+    #[inline(always)]
     pub unsafe fn hook_jni_native_methods<M: AsMut<[JNINativeMethod]>>(
         &mut self,
         env: JNIEnv,
@@ -76,6 +81,7 @@ impl super::ZygiskApi<'_, V3> {
 
     /// # Safety
     ///
+    #[inline(always)]
     pub unsafe fn plt_hook_register<'a, 'b, S>(
         &'a mut self,
         regex: S,
@@ -107,6 +113,7 @@ impl super::ZygiskApi<'_, V3> {
 
     /// # Safety
     ///
+    #[inline(always)]
     pub unsafe fn plt_hook_exclude<S>(&mut self, regex: S, symbol: S)
     where
         S: AsRef<ffi::CStr>,
@@ -122,6 +129,7 @@ impl super::ZygiskApi<'_, V3> {
         }
     }
 
+    #[inline(always)]
     pub fn plt_hook_commit(&mut self) -> Result<(), ZygiskError> {
         match unsafe { (self.dispatch().plt_hook_commit_fn)() } {
             true => Ok(()),

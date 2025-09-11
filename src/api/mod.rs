@@ -25,6 +25,7 @@ where
     Version: ZygiskRaw<'a> + 'a,
 {
     #[doc(hidden)]
+    #[inline(always)]
     pub unsafe fn dispatch(&self) -> &<Version as ZygiskRaw<'a>>::ApiTable {
         unsafe { &*self.0.0 }
     }

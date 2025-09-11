@@ -29,6 +29,7 @@ impl super::ZygiskApi<'_, V1> {
     ///
     /// Returns a [UnixStream] that is connected to the socket passed to your module's companion
     /// request handler. Returns `Err` if the connection attempt failed.
+    #[inline(always)]
     pub fn with_companion<R>(
         &mut self,
         f: impl FnOnce(&mut UnixStream) -> R,
@@ -46,6 +47,7 @@ impl super::ZygiskApi<'_, V1> {
 
     /// Set various options for your module.
     /// Check [ZygiskOption] for the full list of options available.
+    #[inline(always)]
     pub fn set_option(&mut self, option: ZygiskOption) {
         let api_dispatch = unsafe { self.dispatch() };
 
@@ -65,6 +67,7 @@ impl super::ZygiskApi<'_, V1> {
     ///
     /// This function is unsafe, since a badly designed hook or misuse of raw pointers may lead to
     /// memory unsafety.
+    #[inline(always)]
     pub unsafe fn hook_jni_native_methods(
         &mut self,
         env: JNIEnv,
@@ -100,6 +103,7 @@ impl super::ZygiskApi<'_, V1> {
     ///
     /// This function is unsafe, since a badly designed hook or misuse of raw pointers may lead to
     /// memory unsafety.
+    #[inline(always)]
     pub unsafe fn plt_hook_register<'a, 'b, S>(
         &'a mut self,
         regex: S,
@@ -131,6 +135,7 @@ impl super::ZygiskApi<'_, V1> {
 
     /// For ELFs loaded in memory matching `regex`, exclude hooks registered for `symbol`.
     /// If symbol is empty, then all symbols will be excluded.
+    #[inline(always)]
     pub fn plt_hook_exclude<S>(&mut self, regex: S, symbol: S)
     where
         S: AsRef<ffi::CStr>,
@@ -149,6 +154,7 @@ impl super::ZygiskApi<'_, V1> {
     /// Commit all the hooks that was previously registered.
     ///
     /// Returns [`ZygiskError::PltHookCommitError`] if any error occurs.
+    #[inline(always)]
     pub fn plt_hook_commit(&mut self) -> Result<(), ZygiskError> {
         match unsafe { (self.dispatch().plt_hook_commit_fn)() } {
             true => Ok(()),

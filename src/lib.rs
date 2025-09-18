@@ -18,44 +18,94 @@ pub(crate) mod impl_sealing {
     pub trait Sealed {}
 }
 
+#[allow(unused_variables)]
 pub trait ZygiskModule {
+    /// The API version that this module is built against
     type Api: for<'a> ZygiskRaw<'a>;
 
-    fn on_load(&self, _: ZygiskApi<'_, Self::Api>, _: JNIEnv<'_>) {}
+    /// This method gets called as soon as the Zygisk module gets loaded into the target process
+    fn on_load(&self, api: ZygiskApi<'_, Self::Api>, env: JNIEnv<'_>) {}
 
+    /// This method gets called before the target process is specialized as an app process
+    ///
+    /// At this point, this process just got forked from zygote, but no app-specific specialization process has been done yet.
+    /// This means that the process is still running with the same privilege as zygote.
+    ///
+    /// All of the arguments that will get used to specialize the app process is available for mutation through the exclusive `AppSpecializeArgs` reference (`args`).
+    /// Modules can read and overwrite these arguments to change behaviors of the app specialization.
+    ///
+    /// If you need to perform operations as the superuser, the `api.with_companion(..)` instance method can be used to safely communicate with a root companion process through a closure.
     fn pre_app_specialize<'a>(
         &self,
-        _: ZygiskApi<'a, Self::Api>,
-        _: JNIEnv<'a>,
-        _: &'a mut <Self::Api as ZygiskRaw<'_>>::AppSpecializeArgs,
+        api: ZygiskApi<'a, Self::Api>,
+        env: JNIEnv<'a>,
+        args: &'a mut <Self::Api as ZygiskRaw<'_>>::AppSpecializeArgs,
     ) {
     }
 
+    /// This method gets called after the target process has been specialized as an app process.
+    ///
+    /// At this point, the process has been fully specialized, and is running with the privileges of the target app.
     fn post_app_specialize<'a>(
         &self,
-        _: ZygiskApi<'a, Self::Api>,
-        _: JNIEnv<'a>,
-        _: &'a <Self::Api as ZygiskRaw<'_>>::AppSpecializeArgs,
+        api: ZygiskApi<'a, Self::Api>,
+        env: JNIEnv<'a>,
+        args: &'a <Self::Api as ZygiskRaw<'_>>::AppSpecializeArgs,
     ) {
     }
 
+    /// This method gets called before the target process is specialized as the system server process.
+    ///
+    /// See [`ZygiskModule::pre_app_specialize`] for more details.
     fn pre_server_specialize<'a>(
         &self,
-        _: ZygiskApi<'a, Self::Api>,
-        _: JNIEnv<'a>,
-        _: &'a mut <Self::Api as ZygiskRaw<'_>>::ServerSpecializeArgs,
+        api: ZygiskApi<'a, Self::Api>,
+        env: JNIEnv<'a>,
+        args: &'a mut <Self::Api as ZygiskRaw<'_>>::ServerSpecializeArgs,
     ) {
     }
 
+    /// This method gets called after the target process has been specialized as the system server process.
+    ///
+    /// At this point, the process has been fully specialized, and is running with the privileges of the system server.
     fn post_server_specialize<'a>(
         &self,
-        _: ZygiskApi<'a, Self::Api>,
-        _: JNIEnv<'a>,
-        _: &'a <Self::Api as ZygiskRaw<'_>>::ServerSpecializeArgs,
+        api: ZygiskApi<'a, Self::Api>,
+        env: JNIEnv<'a>,
+        args: &'a <Self::Api as ZygiskRaw<'_>>::ServerSpecializeArgs,
     ) {
     }
 }
 
+/// Registers a [`ZygiskModule`] implementation as the module's entry point.
+///
+/// This macro exports a function symbol named `zygisk_module_entry` that Zygisk will use as an entry point to initialize the module.
+/// The provided type must implement the [`ZygiskModule`] trait and have a [`Default`] implementation.
+///
+/// # Example
+///
+/// ```
+/// #[derive(Default)]
+/// struct MyModule;
+///
+/// impl zygisk_api::ZygiskModule for MyModule {
+///    type Api = zygisk_api::api::V5;
+/// }
+///
+/// zygisk_api::register_module!(MyModule);
+/// ```
+///
+/// If a reference to the entry function is needed, it can be obtained through an `extern "C"` block:
+///
+/// ```ignore
+/// unsafe extern "C" {
+///     #[link_name = "zygisk_module_entry"]
+///      fn entry_fn(
+///          api_table: *const (),
+///          env: *mut jni::sys::JNIEnv,
+///      );
+/// }
+/// ```
 #[macro_export]
 macro_rules! register_module {
     ($module:ty) => {
@@ -139,6 +189,11 @@ macro_rules! register_module {
     };
 }
 
+/// Registers a function that will act as the entry point for the module's companion process
+///
+/// The provided function must have the signature `fn(&mut std::os::unix::net::UnixStream)`.
+/// This function will be called when the companion process is started, and it will receive a
+/// `UnixStream` connected to the Zygisk module
 #[macro_export]
 macro_rules! register_companion {
     ($func: expr) => {
